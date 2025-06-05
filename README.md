@@ -35,62 +35,73 @@ Both examples below implement the same simple todo functionality from [VanJS](ht
 
 #### Class-Based Component
 
+[Try on CodePen](https://codepen.io/VoidedClouds/pen/pvJRBME)
+
 ```javascript
 import van from 'vanjs-core';
 import vanRE from 'vanjs-reactive-element';
 
-const { VanReactiveElement, css } = vanRE({ van });
+// Extract VanReactiveElement and css helper from vanRE
+const { VanReactiveElement, css, define } = vanRE({ van });
 
+// Define a custom element <todo-list> by extending VanReactiveElement
 class TodoList extends VanReactiveElement {
+  // Props with default values and types
   static properties = {
-    title: { default: 'Todo List', type: String }
+    title: { default: 'Todo List', type: String },
+    titleAttributePostfix: 'Will be replaced',
+    titlePropertyPostfix: { attribute: false, default: 'Will also be replaced' }
   };
 
+  // Define component styles
   static get styles() {
     return css`
-      :host {
-        display: block;
-        padding: 1rem;
-      }
-      input[type='text'] {
-        margin-right: 0.5rem;
-      }
-      .todo-item {
-        margin: 0.5rem 0;
+      a {
+        cursor: pointer;
       }
     `;
   }
 
+  // Factory method to create a reactive todo item
   createTodoItem(text) {
-    const done = van.state(false);
-    const deleted = van.state(false);
+    const done = van.state(false); // Track if the todo is done
+    const deleted = van.state(false); // Track if the todo is deleted
     const { div, input, span, del, a } = van.tags;
 
+    // Return a function that reactively renders the todo item
     return () =>
       deleted.val
-        ? null
+        ? null // If deleted, render nothing
         : div(
             { class: 'todo-item' },
             input({
               type: 'checkbox',
               checked: done,
-              onclick: (e) => (done.val = e.target.checked)
+              onclick: (e) => (done.val = e.target.checked) // Toggle done state
             }),
-            () => (done.val ? del : span)(text),
-            a({ onclick: () => (deleted.val = true) }, '❌')
+            () => (done.val ? del : span)(text), // Strike-through if done
+            a({ onclick: () => (deleted.val = true) }, '❌') // Delete button
           );
   }
 
+  // Render method for the main todo list UI
   render() {
     const { div, h2, input, button } = van.tags;
-    const inputDom = input({ type: 'text' });
+    const inputDom = input({ type: 'text' }); // Input for new todo text
+    const count = van.state(0); // Track number of add clicks
+    const derived = van.derive(() => count.val * 2); // Derived state
 
+    // Main DOM structure
     const dom = div(
-      h2(this.title),
+      h2(this.title, ' - Attribute: ', this.titleAttributePostfix, ' - Property: ', this.titlePropertyPostfix),
+      div('Add Click Count: ', count, ' * 2 = ', derived),
       inputDom,
       button(
         {
-          onclick: () => van.add(dom, this.createTodoItem(inputDom.value))
+          onclick: () => (
+            count.val++, // Increment count
+            van.add(dom, this.createTodoItem(inputDom.value)) // Add new todo item
+          )
         },
         'Add'
       )
@@ -100,46 +111,63 @@ class TodoList extends VanReactiveElement {
   }
 }
 
-TodoList.define(); // Creates <todo-list>
+// Register the custom element as <todo-list>
+TodoList.define();
+
+// State for the property postfix, updates every second
+const titlePropertyPostfix = van.state(new Date().toLocaleTimeString());
+
+// Create the todo-list element and set its attribute postfix
+const todoList = van.tags['todo-list']({
+  'title-attribute-postfix': 'Attribute Postfix'
+});
+todoList.titlePropertyPostfix = titlePropertyPostfix; // Bind property postfix
+
+// Update postfixes every second
+const intervalId = setInterval(() => {
+  const timeString = new Date().toLocaleTimeString();
+  titlePropertyPostfix.val = timeString; // Update property postfix
+  todoList.setAttribute('title-attribute-postfix', timeString); // Update attribute postfix
+}, 1000);
+
+// Mount the todo list to the document body
+van.add(document.body, todoList);
 ```
 
 > **Tip:** You can always use the native [`customElements.define`](https://developer.mozilla.org/en-US/docs/Web/API/CustomElementRegistry/define) method to register your component classes if you prefer. The provided `define` method is a convenience, but not required.
 
 #### Functional Component
 
+[Try on CodePen](https://codepen.io/VoidedClouds/pen/JodEQBG)
+
 ```javascript
-import van from 'vanjs-core';
-import vanRE from 'vanjs-reactive-element';
-
-const { define, css } = vanRE({ van });
-
+// Define a custom element "todo-list"
 const TodoList = define(
-  'todo-list-func',
+  'todo-list',
   {
-    title: { default: 'Todo List', type: String }
+    // Props with default values and types (Props are Attributes by default)
+    title: { default: 'Todo List', type: String },
+    titleAttributePostfix: 'Will be replaced',
+    titlePropertyPostfix: { attribute: false, default: 'Will also be replaced' }
   },
-  (props, { element, setStyles }) => {
+  (props, { element, noShadowDOM, onCleanup, onMount, render, setStyles }) => {
+    // Set component styles
     setStyles(css`
-      :host {
-        display: block;
-        padding: 1rem;
-      }
-      input[type='text'] {
-        margin-right: 0.5rem;
-      }
-      .todo-item {
-        margin: 0.5rem 0;
+      a {
+        cursor: pointer;
       }
     `);
 
+    // Factory for creating a todo item component
     const createTodoItem = (text) => {
-      const done = van.state(false);
-      const deleted = van.state(false);
+      const done = van.state(false); // Track if todo is done
+      const deleted = van.state(false); // Track if todo is deleted
       const { div, input, span, del, a } = van.tags;
 
+      // Return a function that renders the todo item reactively
       return () =>
         deleted.val
-          ? null
+          ? null // If deleted, render nothing
           : div(
               { class: 'todo-item' },
               input({
@@ -147,32 +175,58 @@ const TodoList = define(
                 checked: done,
                 onclick: (e) => (done.val = e.target.checked)
               }),
-              () => (done.val ? del : span)(text),
-              a({ onclick: () => (deleted.val = true) }, '❌')
+              () => (done.val ? del : span)(text), // Strike-through if done
+              a({ onclick: () => (deleted.val = true) }, '❌') // Delete button
             );
     };
 
-    element.render = () => {
+    // Main render function for the todo list
+    render(() => {
       const { div, h2, input, button } = van.tags;
-      const inputDom = input({ type: 'text' });
+      const inputDom = input({ type: 'text' }); // Input for new todos
+      const count = van.state(0); // Count of add clicks
+      const derived = van.derive(() => count.val * 2); // Derived state
 
+      // Main DOM structure
       const dom = div(
-        h2(element.title),
+        h2(props.title, ' - Attribute: ', props.titleAttributePostfix, ' - Property: ', props.titlePropertyPostfix),
+        div('Add Click Count: ', count, ' * 2 = ', derived),
         inputDom,
         button(
           {
-            onclick: () => van.add(dom, createTodoItem(inputDom.value))
+            onclick: () => (
+              count.val++, // Increment count
+              van.add(dom, createTodoItem(inputDom.value)) // Add new todo item
+            )
           },
           'Add'
         )
       );
 
       return dom;
-    };
+    });
   }
 );
-
 // Note: The `define` function returns a custom element class, which can be subclassed or registered manually if needed.
+
+// State for the property postfix, updates every second
+const titlePropertyPostfix = van.state(new Date().toLocaleTimeString());
+
+// Create the todo-list element, set attribute postfix
+const todoList = van.tags['todo-list']({
+  'title-attribute-postfix': 'Attribute Postfix'
+});
+todoList.titlePropertyPostfix = titlePropertyPostfix; // Bind property postfix
+
+// Update postfixes every second
+const intervalId = setInterval(() => {
+  const timeString = new Date().toLocaleTimeString();
+  titlePropertyPostfix.val = timeString; // Update property postfix
+  todoList.setAttribute('title-attribute-postfix', timeString); // Update attribute postfix
+}, 1000);
+
+// Mount the todo list to the document body
+van.add(document.body, todoList);
 ```
 
 **Note:** When using the `define` function, you must provide the full tag name (including a hyphen) as required by the web components spec.
@@ -192,8 +246,8 @@ Initialize the VanJS Reactive Element library.
 **Returns:**
 
 - `VanReactiveElement` - Base class for creating class-based components
-- `define` - Function for creating functional components
 - `css` - Tagged template literal for component styles
+- `define` - Function for creating functional components
 
 ### `VanReactiveElement` Class
 
@@ -256,7 +310,7 @@ A custom element class, which can be subclassed or registered manually if needed
 
 ### Important Notes
 
-1. **Reactivity**: Properties are not reactive by default. Use `van.state()` for reactive properties.
+1. **Reactivity**: Properties are not reactive by default. Use `van.state()` or `van.derive()` for reactive properties.
 2. **Element Naming**: You must provide the full custom element name (with hyphen) when calling `define`.
 3. **Property Binding**: Properties with attribute binding use `van.state` internally for reactivity.
 
@@ -269,7 +323,7 @@ VanJS Reactive Element supports two patterns for reactive rendering:
    ```javascript
    render() {
      const {div} = van.tags;
-     // Pass state objects directly - VanJS handles reactivity
+     // Pass derive/state objects directly - VanJS handles reactivity
      return div('Count: ', this.count);
    }
    ```
@@ -286,7 +340,7 @@ VanJS Reactive Element supports two patterns for reactive rendering:
    }
    ```
 
-Use direct state binding when possible for cleaner code. Use function-based rendering when you need to access `.val` or use computed properties that aren't van.derive states.
+Use direct derive/state binding when possible for cleaner code. Use function-based rendering when you need to access `.val` or use computed properties that aren't van.derive states.
 
 #### Example: When to Use Each Pattern
 
