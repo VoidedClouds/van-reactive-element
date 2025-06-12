@@ -12,7 +12,6 @@ import {
 } from '../src/property-utils';
 
 describe('property-utils', () => {
-
   describe('camelAndPascalToKebab', () => {
     it('should convert camelCase to kebab-case', () => {
       expect(camelAndPascalToKebab('camelCase')).toBe('camel-case');
@@ -62,7 +61,7 @@ describe('property-utils', () => {
       expect(defaultConverter.toAttribute('test')).toBe('test');
       expect(defaultConverter.toAttribute(123)).toBe(123);
       expect(defaultConverter.toAttribute(null)).toBe(null);
-      
+
       expect(defaultConverter.fromAttribute('test')).toBe('test');
       expect(defaultConverter.fromAttribute(null)).toBe(null);
     });
@@ -132,20 +131,17 @@ describe('property-utils', () => {
     it('should pass through objects directly', () => {
       const obj = { test: true };
       expect(objectConverter.fromAttribute(obj as any)).toBe(obj);
-      
+
       const arr = [1, 2, 3];
       expect(objectConverter.fromAttribute(arr as any)).toBe(arr);
     });
 
     it('should handle JSON parse errors', () => {
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      
-      expect(objectConverter.fromAttribute('invalid json')).toBe(null);
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Error parsing attribute value as JSON: invalid json',
-        expect.any(Error)
-      );
-      
+
+      expect(objectConverter.fromAttribute('invalid json')).toBe('invalid json');
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error parsing attribute value as JSON: invalid json', expect.any(Error));
+
       consoleErrorSpy.mockRestore();
     });
   });
@@ -173,5 +169,4 @@ describe('property-utils', () => {
       expect(converters.Array).toBe(arrayConverter);
     });
   });
-
 });

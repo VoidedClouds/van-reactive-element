@@ -58,7 +58,7 @@ const objectConverter: AttributeConverter<object> = {
       return JSON.parse(value as string);
     } catch (e) {
       console.error(`Error parsing attribute value as JSON: ${value}`, e);
-      return null; // Or return the original string, or a default object?
+      return value;
     }
   }
 };

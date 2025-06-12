@@ -1,4 +1,17 @@
-import { describe, it, expect, beforeEach, afterEach, vi, VanReactiveElement, define, van, tags, promisedTimeout } from './utils';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  VanReactiveElement,
+  define,
+  van,
+  tags,
+  InternalProperties,
+  promisedTimeout
+} from './utils';
 import { css } from '../src/syntax-utils';
 
 // Helper to generate a unique tag name for each test
@@ -360,9 +373,145 @@ describe('VanReactiveElement Integration Tests', () => {
       expect(element.shadowRoot).toBe(null);
       expect(element.querySelector('.light-content')?.textContent).toBe('Light DOM Content');
     });
+
+    it('should support destructuring and in operator on props in functional components', async () => {
+      let hasChecks: Record<string, boolean> = {};
+      let destructuredValues: any = {};
+
+      define(
+        'props-iteration',
+        {
+          name: { type: String, default: 'World' },
+          count: { type: Number, default: 42 },
+          active: { type: Boolean, default: true },
+          data: { attribute: false, default: { test: 'value' } }
+        },
+        (props: any, { element }: any) => {
+          // Test destructuring (this only needs the get trap)
+          const { name, count, active, data } = props;
+          destructuredValues = { name, count, active, data };
+
+          // Test 'in' operator
+          hasChecks = {
+            hasName: 'name' in props,
+            hasCount: 'count' in props,
+            hasActive: 'active' in props,
+            hasData: 'data' in props,
+            hasNonExistent: 'nonExistent' in props
+          };
+
+          element.render = () =>
+            tags.div(
+              tags.p(`Has name: ${hasChecks.hasName}`),
+              tags.p(`Has count: ${hasChecks.hasCount}`),
+              tags.p(`Has nonExistent: ${hasChecks.hasNonExistent}`)
+            );
+        }
+      );
+
+      const element = document.createElement('props-iteration') as any;
+      container.appendChild(element);
+
+      await promisedTimeout();
+
+      // Verify 'in' operator works
+      expect(hasChecks.hasName).toBe(true);
+      expect(hasChecks.hasCount).toBe(true);
+      expect(hasChecks.hasActive).toBe(true);
+      expect(hasChecks.hasData).toBe(true);
+      expect(hasChecks.hasNonExistent).toBe(false);
+
+      // Verify destructuring works (this only needs the get trap)
+      expect(destructuredValues.name.val).toBe('World');
+      expect(destructuredValues.count.val).toBe(42);
+      expect(destructuredValues.active.val).toBe(true);
+      expect(destructuredValues.data).toEqual({ test: 'value' });
+    });
   });
 
   describe('Advanced Reactivity', () => {
+    it('should provide val getter for easy access to reactive property values', async () => {
+      const tag = uniqueTagName('val-getter-element');
+      class ValGetterElement extends VanReactiveElement {
+        static properties = {
+          name: { type: String, default: 'World' },
+          count: { type: Number, default: 0 },
+          isActive: { type: Boolean, default: false },
+          data: { attribute: false, default: { foo: 'bar' } }
+        };
+
+        render() {
+          // The render function needs to be reactive, so we return a function
+          return () => {
+            // Using val getter to access values without .val on each property
+            const { name, count, isActive, data } = this.val;
+
+            return tags.div(
+              tags.h2(`Hello, ${name}!`),
+              tags.p(`Count: ${count}`),
+              tags.p(`Active: ${isActive}`),
+              tags.p(`Data: ${JSON.stringify(data)}`),
+              tags.button(
+                {
+                  onclick: () => {
+                    // Can still set via the state objects
+                    (this as any).count.val++;
+                    (this as any).isActive.val = !(this as any).isActive.val;
+                  }
+                },
+                'Update'
+              )
+            );
+          };
+        }
+      }
+
+      if (!customElements.get(tag)) ValGetterElement.define(ValGetterElement, tag);
+      await customElements.whenDefined(tag);
+
+      const element = document.createElement(tag) as any;
+      container.appendChild(element);
+
+      await promisedTimeout();
+
+      // Check initial render
+      const h2 = element.renderRoot.querySelector('h2');
+      expect(h2?.textContent).toBe('Hello, World!');
+
+      const paragraphs = element.renderRoot.querySelectorAll('p');
+      expect(paragraphs[0].textContent).toBe('Count: 0');
+      expect(paragraphs[1].textContent).toBe('Active: false');
+      expect(paragraphs[2].textContent).toBe('Data: {"foo":"bar"}');
+
+      // Test val getter returns correct values
+      expect(element.val.name).toBe('World');
+      expect(element.val.count).toBe(0);
+      expect(element.val.isActive).toBe(false);
+      expect(element.val.data).toEqual({ foo: 'bar' });
+
+      // Click button to update
+      const button = element.renderRoot.querySelector('button');
+      button?.click();
+      await promisedTimeout();
+
+      // Check updated values via val getter
+      expect(element.val.count).toBe(1);
+      expect(element.val.isActive).toBe(true);
+
+      // Check updated render - re-query paragraphs after update
+      const updatedParagraphs = element.renderRoot.querySelectorAll('p');
+      expect(updatedParagraphs[0].textContent).toBe('Count: 1');
+      expect(updatedParagraphs[1].textContent).toBe('Active: true');
+
+      // Update via attributes
+      element.setAttribute('name', 'VanJS');
+      await promisedTimeout();
+
+      expect(element.val.name).toBe('VanJS');
+      const updatedH2 = element.renderRoot.querySelector('h2');
+      expect(updatedH2?.textContent).toBe('Hello, VanJS!');
+    });
+
     it('should handle computed properties and effects', async () => {
       const tag = uniqueTagName('reactive-element');
       class ReactiveElement extends VanReactiveElement {
@@ -462,6 +611,7 @@ describe('VanReactiveElement Integration Tests', () => {
           isActive: { default: false, type: Boolean },
           data: { default: null, type: Object }
         };
+
         render() {
           return tags.div(
             tags.h3(this['name']),
@@ -547,6 +697,104 @@ describe('VanReactiveElement Integration Tests', () => {
       // Clean up
       await promisedTimeout();
       document.body.removeChild(element);
+    });
+  });
+
+  describe('van.add with web components', () => {
+    it('should work with van.add when extending VanReactiveElement', async () => {
+      const tag = uniqueTagName('van-add-component');
+
+      class VanAddComponent extends VanReactiveElement {
+        static properties = {
+          hello: { default: 'Hello', type: String },
+          world: { default: { foo: 'bar' }, attribute: false }
+        };
+
+        render() {
+          const self = this as InternalProperties;
+          return tags.div(tags.h2(self.hello), tags.p('Data: ', JSON.stringify(self.world)));
+        }
+      }
+
+      if (!customElements.get(tag)) VanAddComponent.define(VanAddComponent, tag);
+      await customElements.whenDefined(tag);
+
+      // Create element using van.add
+      const wrapper = document.createElement('div');
+      container.appendChild(wrapper);
+
+      // Use van.add to create the component
+      const testHello = 'Created with van.add';
+      const testWorld = { bar: 'foo' };
+      van.add(wrapper, van.tags[tag]({ hello: testHello, world: testWorld } as any));
+
+      await promisedTimeout();
+
+      const element = wrapper.querySelector(tag) as any;
+      expect(element).toBeTruthy();
+      expect(element.getAttribute('hello')).toBe(testHello);
+      expect(element.hello.val).toBe(testHello);
+
+      expect(element.world).toEqual(testWorld);
+
+      // Verify no 'data' attribute exists on the element
+      expect(element.hasAttribute('data')).toBe(false);
+
+      // Verify the data property contains the same object reference
+      const originalData = element.world;
+      expect(element.world).toBe(originalData);
+    });
+
+    it('should work with define() when property has attribute: false and default object', async () => {
+      const tag = uniqueTagName('functional-no-attr');
+
+      define(
+        tag,
+        {
+          hello: { type: String, default: 'Hello' },
+          world: { attribute: false, default: { foo: 'bar' } }
+        },
+        (props: InternalProperties, { element, setStyles }: any) => {
+          setStyles(css`
+            :host {
+              display: block;
+              padding: 10px;
+              border: 1px solid #ccc;
+            }
+          `);
+
+          element.render = () => {
+            return tags.div(tags.h2(props.hello), tags.p('Data: ', JSON.stringify(props.world)));
+          };
+        }
+      );
+
+      await customElements.whenDefined(tag);
+
+      // Create element using van.add
+      const wrapper = document.createElement('div');
+      container.appendChild(wrapper);
+
+      // Use van.add to create the component with van.tags
+      const testHello = 'Created with van.add';
+      const testWorld = { bar: 'foo' };
+      van.add(wrapper, van.tags[tag]({ hello: testHello, world: testWorld } as any));
+
+      await promisedTimeout();
+
+      const element = wrapper.querySelector(tag) as any;
+      expect(element).toBeTruthy();
+      expect(element.getAttribute('hello')).toBe(testHello);
+      expect(element.hello.val).toBe(testHello);
+
+      expect(element.world).toEqual(testWorld);
+
+      // Verify no 'world' attribute exists on the element
+      expect(element.hasAttribute('world')).toBe(false);
+
+      // Verify the world property contains the same object reference
+      const originalData = element.world;
+      expect(element.world).toBe(originalData);
     });
   });
 });

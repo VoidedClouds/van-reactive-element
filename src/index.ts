@@ -138,8 +138,24 @@ export interface VanReactiveElementClass<T extends VanReactiveElement = VanReact
   define(elementClass?: any, name?: string): any;
 }
 
+/**
+ * Helper type for internal property storage on VanReactiveElement instances.
+ * Use this when you need to access internal property values in custom element methods.
+ *
+ * @example
+ * // In a custom element implementation
+ * class MyElement extends VanReactiveElement {
+ *   render() {
+ *     const internalProps = this as InternalProperties;
+ *     return tags.div(tags.h2(internalProps.hello as ChildDom));
+ *   }
+ * }
+ */
+export type InternalProperties = Record<string, any>;
+
 export interface VanReactiveElement extends HTMLElement {
   readonly renderRoot: ShadowRoot | HTMLElement | null;
+  readonly val: InternalProperties;
   createRenderRoot(): ShadowRoot | HTMLElement;
   onCleanup?(): void;
   onMount?(): void;
@@ -151,11 +167,9 @@ export interface VanReactiveElement extends HTMLElement {
   dispatchCustomEvent<T = any>(typeName: string, options?: CustomEventInit<T>): boolean;
 }
 
-// Helper type for internal property storage
-type InternalProperties = Record<string, unknown>;
-
 const vanRE = (options: VanREOptions): VanRE => {
   const { rxScope = (fn) => (fn?.(), () => {}), propsAsAttr = true, van } = options;
+  const { defineProperty, entries, fromEntries, getPrototypeOf } = Object;
   /**
    * VanReactiveElement provides a base class for creating custom HTML elements with reactive properties.
    * It integrates a reactivity system with the Web Components standard.
@@ -253,7 +267,7 @@ const vanRE = (options: VanREOptions): VanRE => {
 
       if (!properties) return attributes;
 
-      for (const [propName, options] of Object.entries(properties)) {
+      for (const [propName, options] of entries(properties)) {
         if (!options) continue;
 
         const shouldInclude = options.attribute !== undefined ? options.attribute !== false : propsAsAttr;
@@ -283,17 +297,8 @@ const vanRE = (options: VanREOptions): VanRE => {
       // Convert and set the property
       const value = converter.fromAttribute(newValue);
 
-      // Check if it's a state property (has attribute)
-      const stateKey = `_${propName}State`;
-      const internalProps = this as unknown as InternalProperties;
-      const stateObj = internalProps[stateKey] as State<unknown>;
-      if (stateObj && typeof stateObj.rawVal !== 'undefined') {
-        // It's a state property, update the state's value
-        stateObj.val = value;
-      } else {
-        // It's a regular property
-        internalProps[propName] = value;
-      }
+      // Set the property via its descriptor, which will handle state updates
+      (this as InternalProperties)[propName] = value;
     }
 
     connectedCallback() {
@@ -452,6 +457,26 @@ const vanRE = (options: VanREOptions): VanRE => {
       return this.renderRoot?.querySelectorAll(selector) ?? document.createDocumentFragment().querySelectorAll('*'); // Return empty NodeList
     }
 
+    // --- Property Access ---
+
+    /**
+     * Provides access to the unwrapped values of reactive properties.
+     * For reactive properties (van.state), returns the .val value.
+     * For non-reactive properties, returns the value directly.
+     * @returns {Record<string, any>} A proxy that returns unwrapped property values.
+     * @example
+     * // Instead of: this.count.val
+     * // You can use: this.val.count
+     */
+    get val(): Record<string, any> {
+      return new Proxy({} as Record<string, any>, {
+        get: (_, propName: string) => {
+          const propValue = (this as any)[propName];
+          return propValue && typeof propValue === 'object' && 'val' in propValue ? propValue.val : propValue;
+        }
+      });
+    }
+
     // --- Event Methods ---
 
     /**
@@ -518,7 +543,7 @@ const vanRE = (options: VanREOptions): VanRE => {
     _setupProperties(): void {
       if (this._hasSetupProperties) return;
 
-      const ctor = this.constructor as any;
+      const ctor = this.constructor as InternalProperties;
       const { properties, propsAsAttr } = ctor;
 
       if (!properties) return;
@@ -539,17 +564,13 @@ const vanRE = (options: VanREOptions): VanRE => {
         // --- Define Property Accessor ---
         if (hasAttribute) {
           // Use van.state for properties with attributes (reactive)
-          const stateKey = `_${property}State`;
-          const internalProps = this as unknown as InternalProperties;
-          internalProps[stateKey] = van.state(defaultValue);
+          const propertyState = van.state(defaultValue);
 
-          Object.defineProperty(this, property, {
-            get: () => (this as unknown as InternalProperties)[stateKey], // Return the state object itself
+          defineProperty(this, property, {
+            get: () => propertyState, // Return the state object itself via closure
             set: (newValue) => {
-              const state = (this as unknown as InternalProperties)[stateKey] as State<unknown>;
-              const oldValue = state.rawVal;
-              if (oldValue === newValue) return;
-              state.val = newValue;
+              if (propertyState.rawVal === newValue) return;
+              propertyState.val = newValue;
 
               if (userOptions.reflect) {
                 const attrName = this._propertyToAttributeMap.get(property);
@@ -572,16 +593,13 @@ const vanRE = (options: VanREOptions): VanRE => {
           });
         } else {
           // Simple storage for properties without attributes (non-reactive)
-          const internalProps = this as unknown as InternalProperties;
-          internalProps[`_${property}`] = defaultValue;
+          let propValue = defaultValue;
 
-          Object.defineProperty(this, property, {
-            get: () => (this as unknown as InternalProperties)[`_${property}`],
+          defineProperty(getPrototypeOf(this), property, {
+            get: () => propValue, // Direct reference via closure
             set: (newValue) => {
-              const internalProps = this as unknown as InternalProperties;
-              const oldValue = internalProps[`_${property}`];
-              if (oldValue === newValue) return;
-              internalProps[`_${property}`] = newValue;
+              if (propValue === newValue) return;
+              propValue = newValue;
             },
             configurable: true,
             enumerable: true
@@ -591,11 +609,12 @@ const vanRE = (options: VanREOptions): VanRE => {
         // Sync initial attribute value if present
         if (hasAttribute) {
           const attrName = this._propertyToAttributeMap.get(property);
+
           if (attrName && this.hasAttribute(attrName)) {
             const attrValue = this.getAttribute(attrName);
             const converter = userOptions.converter || (userOptions.type && converters[userOptions.type.name]) || defaultConverter;
-            const internalProps = this as unknown as InternalProperties;
-            internalProps[property] = converter.fromAttribute(attrValue);
+            // Set via property descriptor which will update the state
+            (this as InternalProperties)[property] = converter.fromAttribute(attrValue);
           }
         }
       }
@@ -607,7 +626,7 @@ const vanRE = (options: VanREOptions): VanRE => {
     _setupStyles(): void {
       if (!this.renderRoot) return;
 
-      const ctor = this.constructor as any;
+      const ctor = this.constructor as InternalProperties;
       const styles = ctor.styles;
 
       if (!styles) return;
@@ -647,12 +666,12 @@ const vanRE = (options: VanREOptions): VanRE => {
      */
     define: (
       customElementName: string,
-      properties: Record<string, unknown> = {},
+      properties: PropertyDefinitions = {},
       setup?: (props: Record<string, unknown>, context: SetupContext) => void
     ) => {
       class FunctionalElement extends VanReactiveElementImpl {
-        static properties = Object.fromEntries(
-          Object.entries(properties).map(([key, val]) => {
+        static properties = fromEntries(
+          entries(properties).map(([key, val]) => {
             if (
               typeof val === 'object' &&
               val !== null &&
@@ -675,16 +694,17 @@ const vanRE = (options: VanREOptions): VanRE => {
           super();
 
           // Gather props
-          const props = {} as any;
-          const { properties } = this.constructor as typeof VanReactiveElementImpl;
-          for (const key of Object.keys(properties)) {
-            // Define a getter for each property on the props object
-            Object.defineProperty(props, key, {
-              get: () => (this as unknown as InternalProperties)[key], // The getter calls the underlying reader
-              enumerable: true,
-              configurable: true // Usually good practice for objects created this way
-            });
-          }
+          const props = new Proxy({} as InternalProperties, {
+            get: (_, key: string) => (this as InternalProperties)[key],
+            has: (_, key: string) => key in (this.constructor as typeof VanReactiveElementImpl).properties
+          });
+
+          // Use the val getter from the class
+          defineProperty(props, 'val', {
+            get: () => this.val,
+            configurable: true,
+            enumerable: false
+          });
 
           this.registerDisposer(
             rxScope(() =>
@@ -710,11 +730,11 @@ const vanRE = (options: VanREOptions): VanRE => {
                 },
                 setStyles: (styles: string | CSSStyleSheet) => {
                   // Set styles on the constructor (class)
-                  Object.defineProperty(this.constructor as typeof FunctionalElement, '_dynamicStyles', {
-                    value: styles,
-                    writable: true,
+                  defineProperty(this.constructor as typeof FunctionalElement, '_dynamicStyles', {
+                    configurable: true,
                     enumerable: false,
-                    configurable: true
+                    value: styles,
+                    writable: true
                   });
                 }
               })
