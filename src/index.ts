@@ -226,6 +226,10 @@ export type InferredPropertyType<T> = ShouldWrapInState<T> extends false ? Extra
  */
 export type InferredProperties<T> = {
   [K in keyof T]: InferredPropertyType<T[K]>;
+} & {
+  readonly val: {
+    readonly [K in keyof T]: ExtractPropertyValue<T[K]>;
+  };
 };
 
 export interface VanReactiveElement extends HTMLElement {
