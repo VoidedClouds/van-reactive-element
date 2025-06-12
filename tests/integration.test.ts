@@ -188,7 +188,7 @@ describe('VanReactiveElement Integration Tests', () => {
           text: { default: '' },
           completed: { default: false }
         },
-        (_props: any, { setStyles, element }: any) => {
+        (_props, { setStyles, element }) => {
           setStyles(css`
             :host {
               display: block;
@@ -204,8 +204,8 @@ describe('VanReactiveElement Integration Tests', () => {
 
           element.render = () => {
             // Use van.state for reactive properties
-            const completed = element.completed || van.state(false);
-            const text = element.text || van.state('');
+            const completed = _props.completed;
+            const text = _props.text;
 
             return tags.div(
               { class: () => (completed.val ? 'completed' : '') },
@@ -214,7 +214,7 @@ describe('VanReactiveElement Integration Tests', () => {
                 checked: completed.val,
                 onchange: (e: Event) => {
                   completed.val = (e.target as HTMLInputElement).checked;
-                  element.completed = completed.val;
+                  _props.completed.val = completed.val;
                 }
               }),
               tags.span(text)
@@ -652,7 +652,7 @@ describe('VanReactiveElement Integration Tests', () => {
             default: 'Toggle'
           }
         },
-        (props: any, { setStyles, element }: any) => {
+        (props, { setStyles, element }) => {
           setStyles(css`
             :host {
               display: inline-block;
@@ -671,7 +671,7 @@ describe('VanReactiveElement Integration Tests', () => {
             tags.button(
               {
                 'aria-pressed': props.pressed,
-                onclick: () => (element.pressed = !element.pressed.val)
+                onclick: () => ((element as any).pressed = !(element as any).pressed.val)
               },
               props.label
             );
@@ -752,9 +752,10 @@ describe('VanReactiveElement Integration Tests', () => {
         tag,
         {
           hello: { type: String, default: 'Hello' },
-          world: { attribute: false, default: { foo: 'bar' } }
+          world: { attribute: false, default: { foo: 'bar' } } as const,
+          zoom: { attribute: false, default: 'replace with state' } as const
         },
-        (props: InternalProperties, { element, setStyles }: any) => {
+        (props, { element, setStyles }) => {
           setStyles(css`
             :host {
               display: block;
@@ -764,7 +765,7 @@ describe('VanReactiveElement Integration Tests', () => {
           `);
 
           element.render = () => {
-            return tags.div(tags.h2(props.hello), tags.p('Data: ', JSON.stringify(props.world)));
+            return tags.div(tags.h2(props.hello), tags.p('Data: ', JSON.stringify(props.world)), tags.span(props.zoom));
           };
         }
       );
@@ -778,7 +779,8 @@ describe('VanReactiveElement Integration Tests', () => {
       // Use van.add to create the component with van.tags
       const testHello = 'Created with van.add';
       const testWorld = { bar: 'foo' };
-      van.add(wrapper, van.tags[tag]({ hello: testHello, world: testWorld } as any));
+      const testZoom = van.state('dynamic');
+      van.add(wrapper, van.tags[tag]({ hello: testHello, world: testWorld, zoom: testZoom } as any));
 
       await promisedTimeout();
 
@@ -788,13 +790,23 @@ describe('VanReactiveElement Integration Tests', () => {
       expect(element.hello.val).toBe(testHello);
 
       expect(element.world).toEqual(testWorld);
+      expect(element.zoom).toEqual(testZoom.val);
 
-      // Verify no 'world' attribute exists on the element
+      // Verify no 'world' or 'zoom' attributes exist on the element
       expect(element.hasAttribute('world')).toBe(false);
+      expect(element.hasAttribute('zoom')).toBe(false);
 
       // Verify the world property contains the same object reference
       const originalData = element.world;
       expect(element.world).toBe(originalData);
+
+      // Update the zoom state and the property should update on the element as well
+      testZoom.val += ' text';
+
+      await promisedTimeout();
+
+      // Verify the world property updated
+      expect(element.zoom).toEqual(testZoom.val);
     });
   });
 });

@@ -4,6 +4,7 @@ import { css } from './syntax-utils';
 
 // Re-export AttributeConverter for external use
 export type { AttributeConverter } from './property-utils';
+export type { State } from 'vanjs-core';
 
 // Export all interfaces for external use
 /**
@@ -11,13 +12,10 @@ export type { AttributeConverter } from './property-utils';
  * @example
  * const vanRE = createVanRE({
  *   van: { add: van.add, state: van.state },
- *   propsAsAttr: true, // Enable automatic attribute binding
  *   rxScope: van.derive // Optional: custom reactive scope
  * })
  */
 export interface VanREOptions {
-  /** Controls default property-attribute binding behavior. Default: true */
-  propsAsAttr?: boolean;
   /** Reactive scope function for managing component lifecycle */
   rxScope?: (fn: () => void | (() => void)) => () => void;
   /** VanJS instance with required methods */
@@ -26,6 +24,38 @@ export interface VanREOptions {
     state: Van['state'];
   };
 }
+
+/**
+ * Type Usage Quick Reference:
+ *
+ * 1. Class Components:
+ * ```typescript
+ * class MyElement extends VanReactiveElement {
+ *   declare name: State<string>;                   // State property
+ *   declare data: InternalProperty<{x: number}>;   // Plain property
+ * }
+ * ```
+ *
+ * 2. Functional Components:
+ * ```typescript
+ * define('my-component', {
+ *   name: 'John',                                    // State<string>
+ *   data: { attribute: false, default: {} } as const // Plain object
+ * }, (props) => {
+ *   const typed: string = props.name.val;            // Access State value
+ *   const plain: {} = props.data;                    // Direct access
+ * })
+ * ```
+ *
+ * 3. With 'as const' for literal types:
+ * ```typescript
+ * define('my-component', {
+ *   data: { attribute: false, default: {} } as const
+ * }, (props) => {
+ *   const typed: {} = props.data;  // TypeScript knows it's not State
+ * })
+ * ```
+ */
 
 // More flexible type for property constructors
 export type PropertyType = StringConstructor | NumberConstructor | BooleanConstructor | ObjectConstructor | ArrayConstructor | Function;
@@ -47,19 +77,19 @@ export type PropertyType = StringConstructor | NumberConstructor | BooleanConstr
  *
  * @example
  * // Property without attribute binding
- * internal: { type: Object, attribute: false }
+ * internal: { type: Object, attribute: false } as const
  */
 export interface PropertyOptions<T = unknown> {
-  /** Default value for the property */
-  default?: T;
-  /** Type hint for automatic conversion (String, Number, Boolean, Object, Array) */
-  type?: PropertyType;
   /** Enable attribute binding. true = kebab-case, false = disabled, string = custom name */
   attribute?: boolean | string;
   /** Custom converter for attribute serialization/deserialization */
   converter?: AttributeConverter<T>;
+  /** Default value for the property */
+  default?: T;
   /** Reflect property changes back to attributes */
   reflect?: boolean;
+  /** Type hint for automatic conversion (String, Number, Boolean, Object, Array) */
+  type?: PropertyType;
 }
 
 /**
@@ -98,25 +128,28 @@ export interface SetupContext<E extends VanReactiveElement = VanReactiveElement>
 }
 
 /**
- * Property definitions supporting both simple values and PropertyOptions
+ * Property definitions for components.
+ * Can use simple values as defaults or full PropertyOptions for more control.
+ *
  * @example
- * // Mix of simple defaults and full options
  * {
- *   name: 'John',                           // Simple string default
- *   age: { type: Number, default: 0 },      // With type hint
- *   active: { type: Boolean, reflect: true }, // With reflection
- *   items: [],                              // Simple array default
- *   config: { attribute: false }            // No attribute binding
+ *   // Simple defaults (will have attributes)
+ *   name: 'John',
+ *   count: 0,
+ *
+ *   // Full configuration
+ *   active: { type: Boolean, reflect: true },
+ *   data: { attribute: false, default: { foo: 'bar' } } as const // No attribute
  * }
  */
 export type PropertyDefinitions<T = Record<string, unknown>> = {
   [K in keyof T]: T[K] | PropertyOptions<T[K]>;
 };
 
-export type DefineFunction = (
+export type DefineFunction = <T extends PropertyDefinitions>(
   customElementName: string,
-  properties?: Record<string, unknown>,
-  setup?: (props: Record<string, unknown>, context: SetupContext) => void
+  properties?: T,
+  setup?: (props: InferredProperties<T>, context: SetupContext) => void
 ) => VanReactiveElementClass;
 
 export interface VanRE {
@@ -134,24 +167,66 @@ export interface VanReactiveElementClass<T extends VanReactiveElement = VanReact
   readonly properties: Record<string, PropertyOptions>;
   readonly shadowRootOptions: ShadowRootInit;
   readonly styles: string | CSSStyleSheet | null;
-  readonly propsAsAttr: boolean;
   define(elementClass?: any, name?: string): any;
 }
 
 /**
- * Helper type for internal property storage on VanReactiveElement instances.
- * Use this when you need to access internal property values in custom element methods.
- *
+ * Helper type for declaring properties in class-based components
  * @example
- * // In a custom element implementation
  * class MyElement extends VanReactiveElement {
- *   render() {
- *     const internalProps = this as InternalProperties;
- *     return tags.div(tags.h2(internalProps.hello as ChildDom));
- *   }
+ *   declare name: State<string>;
+ *   declare count: State<number>;
+ *   declare data: InternalProperty<{ foo: string }>;
+ *
+ *   static properties = {
+ *     name: { type: String, default: 'World' },
+ *     count: { type: Number, default: 0 },
+ *     data: { attribute: false, default: { foo: 'bar' } } as const
+ *   };
  * }
  */
+export type InternalProperty<T> = T;
+
+/**
+ * Type representing the internal storage of properties on an element instance.
+ * This is mainly used internally and for advanced use cases.
+ */
 export type InternalProperties = Record<string, any>;
+
+/**
+ * Extracts the value type from a property definition
+ */
+type ExtractPropertyValue<T> = T extends PropertyOptions<infer U> ? U : T extends { default: infer D } ? D : T;
+
+/**
+ * Determines if a property should be wrapped in State
+ */
+type ShouldWrapInState<T> = T extends { attribute: false } ? false : true;
+
+/**
+ * Infers the runtime type of a property from its definition.
+ * Properties with attribute: false are plain values, others become State<T>
+ */
+export type InferredPropertyType<T> = ShouldWrapInState<T> extends false ? ExtractPropertyValue<T> : State<ExtractPropertyValue<T>>;
+
+/**
+ * Infers the runtime props type from property definitions.
+ * - Properties with attributes become State<T>
+ * - Properties with attribute: false are plain values
+ *
+ * @example
+ * const props = {
+ *   name: 'World',                                     // → State<string>
+ *   count: { type: Number, default: 0 },               // → State<number>
+ *   data: { attribute: false, default: {} } as const   // → {}
+ * };
+ *
+ * type Props = InferredProperties<typeof props>;
+ * // Props = { name: State<string>, count: State<number>, data: {} }
+ */
+export type InferredProperties<T> = {
+  [K in keyof T]: InferredPropertyType<T[K]>;
+};
 
 export interface VanReactiveElement extends HTMLElement {
   readonly renderRoot: ShadowRoot | HTMLElement | null;
@@ -168,7 +243,7 @@ export interface VanReactiveElement extends HTMLElement {
 }
 
 const vanRE = (options: VanREOptions): VanRE => {
-  const { rxScope = (fn) => (fn?.(), () => {}), propsAsAttr = true, van } = options;
+  const { rxScope = (fn) => (fn?.(), () => {}), van } = options;
   const { defineProperty, entries, fromEntries, getPrototypeOf } = Object;
   /**
    * VanReactiveElement provides a base class for creating custom HTML elements with reactive properties.
@@ -222,7 +297,6 @@ const vanRE = (options: VanREOptions): VanRE => {
     _reflectingProperty: string | null = null;
 
     static properties: Record<string, PropertyOptions> = {};
-    static propsAsAttr = propsAsAttr;
 
     /** @private */
     _attributeToPropertyMap = new Map<string, string>();
@@ -263,16 +337,14 @@ const vanRE = (options: VanREOptions): VanRE => {
 
     static get observedAttributes(): string[] {
       const attributes: string[] = [];
-      const { properties, propsAsAttr } = this;
+      const { properties } = this;
 
       if (!properties) return attributes;
 
       for (const [propName, options] of entries(properties)) {
         if (!options) continue;
 
-        const shouldInclude = options.attribute !== undefined ? options.attribute !== false : propsAsAttr;
-
-        if (!shouldInclude) continue;
+        if (options.attribute === false) continue;
 
         const attrName = typeof options.attribute === 'string' ? options.attribute : camelAndPascalToKebab(propName);
         attributes.push(attrName);
@@ -544,7 +616,7 @@ const vanRE = (options: VanREOptions): VanRE => {
       if (this._hasSetupProperties) return;
 
       const ctor = this.constructor as InternalProperties;
-      const { properties, propsAsAttr } = ctor;
+      const { properties } = ctor;
 
       if (!properties) return;
 
@@ -552,17 +624,24 @@ const vanRE = (options: VanREOptions): VanRE => {
         const userOptions = properties[property] || {};
         const defaultValue = userOptions.default;
 
-        const hasAttribute = userOptions.attribute !== undefined ? userOptions.attribute !== false : propsAsAttr;
+        if (userOptions.attribute === false) {
+          // Simple storage for properties without attributes (non-reactive)
+          let propValue = defaultValue;
 
-        // Setup attribute mapping
-        if (hasAttribute) {
+          defineProperty(getPrototypeOf(this), property, {
+            get: () => propValue, // Direct reference via closure
+            set: (newValue) => {
+              propValue = newValue;
+            },
+            configurable: true,
+            enumerable: true
+          });
+        } else {
+          // Setup attribute mapping
           const attrName = typeof userOptions.attribute === 'string' ? userOptions.attribute : camelAndPascalToKebab(property);
           this._attributeToPropertyMap.set(attrName, property);
           this._propertyToAttributeMap.set(property, attrName);
-        }
 
-        // --- Define Property Accessor ---
-        if (hasAttribute) {
           // Use van.state for properties with attributes (reactive)
           const propertyState = van.state(defaultValue);
 
@@ -591,25 +670,8 @@ const vanRE = (options: VanREOptions): VanRE => {
             configurable: true,
             enumerable: true
           });
-        } else {
-          // Simple storage for properties without attributes (non-reactive)
-          let propValue = defaultValue;
 
-          defineProperty(getPrototypeOf(this), property, {
-            get: () => propValue, // Direct reference via closure
-            set: (newValue) => {
-              if (propValue === newValue) return;
-              propValue = newValue;
-            },
-            configurable: true,
-            enumerable: true
-          });
-        }
-
-        // Sync initial attribute value if present
-        if (hasAttribute) {
-          const attrName = this._propertyToAttributeMap.get(property);
-
+          // Sync initial attribute value if present
           if (attrName && this.hasAttribute(attrName)) {
             const attrValue = this.getAttribute(attrName);
             const converter = userOptions.converter || (userOptions.type && converters[userOptions.type.name]) || defaultConverter;
@@ -664,10 +726,10 @@ const vanRE = (options: VanREOptions): VanRE => {
      * @param {object} properties - Property definitions (name: defaultValue or {type, default}).
      * @param {function} setup - Function(props, context) called once per element instance.
      */
-    define: (
+    define: <T extends PropertyDefinitions>(
       customElementName: string,
-      properties: PropertyDefinitions = {},
-      setup?: (props: Record<string, unknown>, context: SetupContext) => void
+      properties: T = {} as T,
+      setup?: (props: InferredProperties<T>, context: SetupContext) => void
     ) => {
       class FunctionalElement extends VanReactiveElementImpl {
         static properties = fromEntries(
@@ -694,10 +756,10 @@ const vanRE = (options: VanREOptions): VanRE => {
           super();
 
           // Gather props
-          const props = new Proxy({} as InternalProperties, {
+          const props = new Proxy({} as InferredProperties<T>, {
             get: (_, key: string) => (this as InternalProperties)[key],
             has: (_, key: string) => key in (this.constructor as typeof VanReactiveElementImpl).properties
-          });
+          }) as InferredProperties<T>;
 
           // Use the val getter from the class
           defineProperty(props, 'val', {
