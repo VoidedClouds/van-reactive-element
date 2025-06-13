@@ -46,7 +46,7 @@ export function setupReactiveState(container: HTMLElement) {
           <input
             type="text"
             value=${props.name}
-            oninput=${(e: Event) => (props.name.val = (e.target as HTMLInputElement).value)}
+            oninput=${(e: Event) => ((props.name as any) = (e.target as HTMLInputElement).value)}
             placeholder="Enter your name"
           />
         </div>

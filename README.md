@@ -299,6 +299,10 @@ A custom element class, which can be subclassed or registered manually if needed
 **Setup Function Parameters:**
 
 - `props` - Reactive property accessors
+  - Properties are VanJS State objects
+  - Reading values: `props.name.val`
+  - Setting values: `props.name = 'new value'` (direct assignment)
+  - In TypeScript: Cast to `any` if needed: `(props as any).name = 'new value'`
 - `context` - Component context object:
   - `element` - The element instance
   - `noShadowDOM()` - Disable shadow DOM

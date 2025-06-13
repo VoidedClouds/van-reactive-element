@@ -477,6 +477,92 @@ describe('VanReactiveElement Integration Tests', () => {
       expect(element.renderRoot.querySelector('.full-name')?.textContent).toBe('Full Name: Jane Doe');
       expect(element.updateCount.val).toBe(2);
     });
+
+    it('should allow setting properties through props proxy in functional components', async () => {
+      const tag = uniqueTagName('props-setter-test');
+
+      let capturedProps: any = null;
+
+      define(
+        tag,
+        {
+          message: { default: 'initial', type: String },
+          count: { type: Number, default: 0 },
+          data: { attribute: false, default: { x: 1 } },
+          isActive: { type: Boolean, default: false, reflect: true }
+        },
+        (props, { render }) => {
+          capturedProps = props;
+
+          render(() => {
+            return tags.div(
+              tags.p({ class: 'message' }, props.message),
+              tags.p({ class: 'count' }, 'Count: ', props.count),
+              tags.p({ class: 'data' }, 'Data: ', () => JSON.stringify(props.data.val)),
+              tags.p({ class: 'active' }, 'Active: ', props.isActive)
+            );
+          });
+        }
+      );
+
+      const element = document.createElement(tag) as any;
+      container.appendChild(element);
+
+      await promisedTimeout();
+
+      // Check initial values
+      expect(element.renderRoot.querySelector('.message')?.textContent).toBe('initial');
+      expect(element.renderRoot.querySelector('.count')?.textContent).toBe('Count: 0');
+      expect(element.renderRoot.querySelector('.data')?.textContent).toBe('Data: {"x":1}');
+      expect(element.renderRoot.querySelector('.active')?.textContent).toBe('Active: false');
+
+      // Test setting properties through props proxy
+      capturedProps.message = 'updated via props';
+      capturedProps.count = 42;
+      capturedProps.data = { x: 2, y: 3 };
+      capturedProps.isActive = true;
+
+      await promisedTimeout();
+
+      // Verify properties were updated
+      expect(element.message.val).toBe('updated via props');
+      expect(element.count.val).toBe(42);
+      expect(element.data.val).toEqual({ x: 2, y: 3 });
+      expect(element.isActive.val).toBe(true);
+
+      // Verify DOM was updated
+      expect(element.renderRoot.querySelector('.message')?.textContent).toBe('updated via props');
+      expect(element.renderRoot.querySelector('.count')?.textContent).toBe('Count: 42');
+      expect(element.renderRoot.querySelector('.data')?.textContent).toBe('Data: {"x":2,"y":3}');
+      expect(element.renderRoot.querySelector('.active')?.textContent).toBe('Active: true');
+
+      // Verify attribute reflection worked
+      expect(element.getAttribute('is-active')).toBe('');
+
+      // Test that props proxy and element properties stay in sync
+      element.message = 'updated via element';
+      element.isActive = false;
+      await promisedTimeout();
+
+      expect(capturedProps.message.val).toBe('updated via element');
+      expect(capturedProps.isActive.val).toBe(false);
+      expect(element.renderRoot.querySelector('.message')?.textContent).toBe('updated via element');
+      expect(element.hasAttribute('is-active')).toBe(false);
+
+      // Test that setter only works for defined properties
+      expect(() => {
+        (capturedProps as any).undefinedProp = 'should not work';
+      }).toThrow("'set' on proxy: trap returned falsish for property 'undefinedProp'");
+
+      // Verify the property was not set on the element
+      expect((element as any).undefinedProp).toBeUndefined();
+      expect((capturedProps as any).undefinedProp).toBeUndefined();
+
+      // Test that 'in' operator works correctly
+      expect('message' in capturedProps).toBe(true);
+      expect('count' in capturedProps).toBe(true);
+      expect('undefinedProp' in capturedProps).toBe(false);
+    });
   });
 
   describe('Query Methods', () => {

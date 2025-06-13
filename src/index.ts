@@ -221,10 +221,10 @@ type InferFromType<T> = T extends StringConstructor
 export type InferredPropertyType<T> = T extends { default: infer D }
   ? State<D>
   : T extends { type: infer Type }
-    ? State<InferFromType<Type>>
-    : T extends PropertyOptions<infer U>
-      ? State<U>
-      : State<T>;
+  ? State<InferFromType<Type>>
+  : T extends PropertyOptions<infer U>
+  ? State<U>
+  : State<T>;
 
 /**
  * Infers the runtime props type from property definitions.
@@ -240,10 +240,10 @@ export type InferredPropertyType<T> = T extends { default: infer D }
  * };
  *
  * type Props = InferredProperties<typeof props>;
- * // Props = { 
- * //   name: State<string>, 
- * //   count: State<number>, 
- * //   active: State<boolean>, 
+ * // Props = {
+ * //   name: State<string>,
+ * //   count: State<number>,
+ * //   active: State<boolean>,
  * //   data: State<{}>,
  * //   items: State<unknown[]>
  * // }
@@ -763,6 +763,14 @@ const vanRE = (options: VanREOptions): VanRE => {
           // Gather props
           const props = new Proxy({} as InferredProperties<T>, {
             get: (_, key: string) => (this as InternalProperties)[key],
+            set: (_, key: string, value: any) => {
+              const properties = (this.constructor as typeof VanReactiveElementImpl).properties;
+              if (key in properties) {
+                (this as InternalProperties)[key] = value;
+                return true;
+              }
+              return false;
+            },
             has: (_, key: string) => key in (this.constructor as typeof VanReactiveElementImpl).properties
           }) as InferredProperties<T>;
 

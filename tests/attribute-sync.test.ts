@@ -92,7 +92,7 @@ describe('Attribute Sync Tests', () => {
         };
       }
 
-      const customElementName = `test-element-${Math.random().toString(36).substr(2, 9)}`;
+      const customElementName = `test-element-${Math.random().toString(36).substring(2, 11)}`;
       customElements.define(customElementName, TestElement);
 
       const element = new TestElement();
@@ -113,7 +113,7 @@ describe('Attribute Sync Tests', () => {
         };
       }
 
-      const customElementName = `test-element-${Math.random().toString(36).substr(2, 9)}`;
+      const customElementName = `test-element-${Math.random().toString(36).substring(2, 11)}`;
       customElements.define(customElementName, TestElement);
 
       const element = new TestElement();
@@ -147,7 +147,7 @@ describe('Attribute Sync Tests', () => {
         };
       }
 
-      const customElementName = `test-element-${Math.random().toString(36).substr(2, 9)}`;
+      const customElementName = `test-element-${Math.random().toString(36).substring(2, 11)}`;
       customElements.define(customElementName, TestElement);
 
       const element = new TestElement();
@@ -165,7 +165,7 @@ describe('Attribute Sync Tests', () => {
         };
       }
 
-      const customElementName = `test-element-${Math.random().toString(36).substr(2, 9)}`;
+      const customElementName = `test-element-${Math.random().toString(36).substring(2, 11)}`;
       customElements.define(customElementName, TestElement);
 
       const element = new TestElement();
@@ -188,7 +188,7 @@ describe('Attribute Sync Tests', () => {
         };
       }
 
-      const customElementName = `test-element-${Math.random().toString(36).substr(2, 9)}`;
+      const customElementName = `test-element-${Math.random().toString(36).substring(2, 11)}`;
       customElements.define(customElementName, TestElement);
 
       const element = new TestElement();
@@ -207,7 +207,7 @@ describe('Attribute Sync Tests', () => {
         };
       }
 
-      const customElementName = `test-element-${Math.random().toString(36).substr(2, 9)}`;
+      const customElementName = `test-element-${Math.random().toString(36).substring(2, 11)}`;
       customElements.define(customElementName, TestElement);
 
       const element = new TestElement();
@@ -237,7 +237,7 @@ describe('Attribute Sync Tests', () => {
         };
       }
 
-      const customElementName = `test-element-${Math.random().toString(36).substr(2, 9)}`;
+      const customElementName = `test-element-${Math.random().toString(36).substring(2, 11)}`;
       customElements.define(customElementName, TestElement);
 
       const element = new TestElement();
@@ -262,7 +262,7 @@ describe('Attribute Sync Tests', () => {
         };
       }
 
-      const customElementName = `test-element-${Math.random().toString(36).substr(2, 9)}`;
+      const customElementName = `test-element-${Math.random().toString(36).substring(2, 11)}`;
       customElements.define(customElementName, TestElement);
 
       const element = new TestElement();
@@ -291,7 +291,7 @@ describe('Attribute Sync Tests', () => {
         };
       }
 
-      const customElementName = `test-element-${Math.random().toString(36).substr(2, 9)}`;
+      const customElementName = `test-element-${Math.random().toString(36).substring(2, 11)}`;
       customElements.define(customElementName, TestElement);
 
       const element = new TestElement();
@@ -319,7 +319,7 @@ describe('Attribute Sync Tests', () => {
         };
       }
 
-      const customElementName = `test-element-${Math.random().toString(36).substr(2, 9)}`;
+      const customElementName = `test-element-${Math.random().toString(36).substring(2, 11)}`;
       customElements.define(customElementName, TestElement);
 
       const element = document.createElement(customElementName) as any;
@@ -342,7 +342,7 @@ describe('Attribute Sync Tests', () => {
         };
       }
 
-      const customElementName = `test-element-${Math.random().toString(36).substr(2, 9)}`;
+      const customElementName = `test-element-${Math.random().toString(36).substring(2, 11)}`;
       customElements.define(customElementName, TestElement);
 
       const element = document.createElement(customElementName) as any;
@@ -375,6 +375,147 @@ describe('Attribute Sync Tests', () => {
       expect(ElementClass.observedAttributes).toContain('my-prop');
       expect(ElementClass.observedAttributes).toContain('item-count');
     });
+
+    it('should properly reflect properties to attributes in functional components', () => {
+      const customElementName = `reflect-component-${Math.random().toString(36).substring(2, 11)}`;
+      
+      const ElementClass = define(
+        customElementName,
+        {
+          reflectedString: {
+            default: 'initial',
+            reflect: true
+          },
+          reflectedNumber: {
+            type: Number,
+            default: 0,
+            reflect: true
+          },
+          reflectedBoolean: {
+            type: Boolean,
+            default: false,
+            reflect: true,
+            attribute: 'is-enabled'
+          },
+          notReflected: {
+            default: 'hidden',
+            reflect: false
+          }
+        },
+        () => {}
+      );
+
+      const element = document.createElement(customElementName) as any;
+      document.body.appendChild(element);
+
+      // Test string reflection
+      element.reflectedString = 'updated value';
+      expect(element.getAttribute('reflected-string')).toBe('updated value');
+
+      // Test number reflection
+      element.reflectedNumber = 42;
+      expect(element.getAttribute('reflected-number')).toBe('42');
+
+      // Test boolean reflection with custom attribute name
+      element.reflectedBoolean = true;
+      expect(element.getAttribute('is-enabled')).toBe('');
+      
+      element.reflectedBoolean = false;
+      expect(element.hasAttribute('is-enabled')).toBe(false);
+
+      // Test non-reflected property
+      element.notReflected = 'changed';
+      expect(element.hasAttribute('not-reflected')).toBe(false);
+
+      // Test null value removes attribute
+      element.reflectedString = null;
+      expect(element.hasAttribute('reflected-string')).toBe(false);
+
+      document.body.removeChild(element);
+    });
+
+    it('should sync initial attributes to properties in functional components', () => {
+      const customElementName = `sync-component-${Math.random().toString(36).substring(2, 11)}`;
+      
+      define(
+        customElementName,
+        {
+          stringProp: {
+            default: 'default'
+          },
+          numberProp: {
+            type: Number,
+            default: 0,
+            attribute: 'num-value'
+          },
+          boolProp: {
+            type: Boolean,
+            default: false
+          }
+        },
+        (props) => {
+          // Properties should be accessible within the setup function
+          // This tests that the setup function has access to synced properties
+        }
+      );
+
+      // Create element with attributes already set
+      const element = document.createElement(customElementName) as any;
+      element.setAttribute('string-prop', 'from-attribute');
+      element.setAttribute('num-value', '100');
+      element.setAttribute('bool-prop', '');
+      
+      document.body.appendChild(element);
+
+      // Properties should be synced from attributes after connection
+      expect(element.stringProp.val).toBe('from-attribute');
+      expect(element.numberProp.val).toBe(100);
+      expect(element.boolProp.val).toBe(true);
+
+      // Test that attribute changes are reflected in properties
+      element.setAttribute('string-prop', 'updated');
+      expect(element.stringProp.val).toBe('updated');
+
+      element.removeAttribute('bool-prop');
+      expect(element.boolProp.val).toBe(false);
+
+      document.body.removeChild(element);
+    });
+
+    it('should handle custom converters in functional components', () => {
+      const customElementName = `converter-component-${Math.random().toString(36).substring(2, 11)}`;
+      
+      const uppercaseConverter = {
+        fromAttribute: (value: string | null) => value ? value.toUpperCase() : null,
+        toAttribute: (value: any) => value ? String(value).toLowerCase() : null
+      };
+
+      const ElementClass = define(
+        customElementName,
+        {
+          customProp: {
+            default: 'test',
+            converter: uppercaseConverter,
+            reflect: true
+          }
+        },
+        () => {}
+      );
+
+      const element = document.createElement(customElementName) as any;
+      element.setAttribute('custom-prop', 'hello');
+      
+      document.body.appendChild(element);
+
+      // Should convert from attribute
+      expect(element.customProp.val).toBe('HELLO');
+
+      // Should convert to attribute
+      element.customProp = 'WORLD';
+      expect(element.getAttribute('custom-prop')).toBe('world');
+
+      document.body.removeChild(element);
+    });
   });
 
   describe('edge cases', () => {
@@ -385,7 +526,7 @@ describe('Attribute Sync Tests', () => {
         };
       }
 
-      const customElementName = `test-element-${Math.random().toString(36).substr(2, 9)}`;
+      const customElementName = `test-element-${Math.random().toString(36).substring(2, 11)}`;
       customElements.define(customElementName, TestElement);
 
       const element = new TestElement();
@@ -402,7 +543,7 @@ describe('Attribute Sync Tests', () => {
         };
       }
 
-      const customElementName = `test-element-${Math.random().toString(36).substr(2, 9)}`;
+      const customElementName = `test-element-${Math.random().toString(36).substring(2, 11)}`;
       customElements.define(customElementName, TestElement);
 
       const element = new TestElement();
