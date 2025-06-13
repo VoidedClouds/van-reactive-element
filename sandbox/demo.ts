@@ -32,27 +32,31 @@ export function setupBasicHTML(container: HTMLElement) {
 
 // Reactive State Demo
 export function setupReactiveState(container: HTMLElement) {
-  define('reactive-state', { count: { attribute: false, default: 0 }, name: '' }, (props, { noShadowDOM, render }) => {
-    noShadowDOM();
+  define(
+    'reactive-state',
+    { count: { attribute: false, default: 0 }, name: { default: '', reflect: true } },
+    (props, { noShadowDOM, render }) => {
+      noShadowDOM();
 
-    render(() => {
-      return html`
-        <div>
-          <h3>Hello, ${props.name}!</h3>
-          <p>Count: ${props.count}</p>
-          <button onclick=${() => props.count.val--}>Decrement</button>
-          <button onclick=${() => props.count.val++}>Increment</button>
-          <br />
-          <input
-            type="text"
-            value=${props.name}
-            oninput=${(e: Event) => ((props.name as any) = (e.target as HTMLInputElement).value)}
-            placeholder="Enter your name"
-          />
-        </div>
-      `;
-    });
-  });
+      render(() => {
+        return html`
+          <div>
+            <h3>Hello, ${props.name}!</h3>
+            <p>Count: ${props.count}</p>
+            <button onclick=${() => props.count.val--}>Decrement</button>
+            <button onclick=${() => props.count.val++}>Increment</button>
+            <br />
+            <input
+              type="text"
+              value=${props.name}
+              oninput=${(e: Event) => ((props.name as any) = (e.target as HTMLInputElement).value)}
+              placeholder="Enter your name"
+            />
+          </div>
+        `;
+      });
+    }
+  );
 
   van.add(container, van.tags['reactive-state']({ count: van.state(0), name: van.state('World') }));
 }
