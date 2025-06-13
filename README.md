@@ -1,4 +1,4 @@
-# VanJS Reactive Element
+# Van Reactive Element
 
 A lightweight web components library that seamlessly integrates [VanJS](https://vanjs.org/) with custom elements, supporting any reactivity system. Build reactive web components with minimal boilerplate and maximum flexibility.
 

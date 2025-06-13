@@ -350,7 +350,7 @@ describe('Attribute Sync Tests', () => {
 
       element._setupProperties();
 
-      expect(element.noAttr).toBe('default');
+      expect(element.noAttr.val).toBe('default');
     });
   });
 

@@ -720,7 +720,7 @@ describe('vanRE', () => {
   });
 
   describe('Attribute Sync Edge Cases', () => {
-    it('should handle non-state properties in attributeChangedCallback', () => {
+    it('should handle properties with attribute: false in attributeChangedCallback', () => {
       class TestElement extends VanReactiveElement {
         static properties = {
           regularProp: {
@@ -739,32 +739,33 @@ describe('vanRE', () => {
       element._attributeToPropertyMap.set('fake-attr', 'regularProp');
       element.attributeChangedCallback('fake-attr', null, 'new-value');
 
-      expect(element.regularProp).toBe('new-value');
+      expect(element.regularProp.val).toBe('new-value');
     });
 
     it('should handle property with attribute: false correctly', () => {
       class TestElement extends VanReactiveElement {
         static properties = {
-          nonReactiveProp: {
+          internalProp: {
             default: 'initial',
             attribute: false
           }
         };
       }
 
-      const customElementName = `non-reactive-element-${Math.random().toString(36).substr(2, 9)}`;
+      const customElementName = `internal-prop-element-${Math.random().toString(36).substr(2, 9)}`;
       customElements.define(customElementName, TestElement);
 
       const element = new TestElement();
       element._setupProperties();
 
-      expect(element.nonReactiveProp).toBe('initial');
+      // All properties are reactive States, even with attribute: false
+      expect(element.internalProp.val).toBe('initial');
 
-      element.nonReactiveProp = 'initial';
-      expect(element.nonReactiveProp).toBe('initial');
+      element.internalProp = 'initial';
+      expect(element.internalProp.val).toBe('initial');
 
-      element.nonReactiveProp = 'changed';
-      expect(element.nonReactiveProp).toBe('changed');
+      element.internalProp = 'changed';
+      expect(element.internalProp.val).toBe('changed');
     });
 
     it('should handle attribute sync when property is set via setter', () => {

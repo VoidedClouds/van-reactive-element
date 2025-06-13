@@ -1,17 +1,4 @@
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  vi,
-  VanReactiveElement,
-  define,
-  van,
-  tags,
-  InternalProperties,
-  promisedTimeout
-} from './utils';
+import { describe, it, expect, beforeEach, afterEach, vi, State, VanReactiveElement, define, van, tags, promisedTimeout } from './utils';
 import { css } from '../src/syntax-utils';
 
 // Helper to generate a unique tag name for each test
@@ -421,97 +408,15 @@ describe('VanReactiveElement Integration Tests', () => {
       expect(hasChecks.hasData).toBe(true);
       expect(hasChecks.hasNonExistent).toBe(false);
 
-      // Verify destructuring works (this only needs the get trap)
+      // Verify destructuring works
       expect(destructuredValues.name.val).toBe('World');
       expect(destructuredValues.count.val).toBe(42);
       expect(destructuredValues.active.val).toBe(true);
-      expect(destructuredValues.data).toEqual({ test: 'value' });
+      expect(destructuredValues.data.val).toEqual({ test: 'value' });
     });
   });
 
   describe('Advanced Reactivity', () => {
-    it('should provide val getter for easy access to reactive property values', async () => {
-      const tag = uniqueTagName('val-getter-element');
-      class ValGetterElement extends VanReactiveElement {
-        static properties = {
-          name: { type: String, default: 'World' },
-          count: { type: Number, default: 0 },
-          isActive: { type: Boolean, default: false },
-          data: { attribute: false, default: { foo: 'bar' } }
-        };
-
-        render() {
-          // The render function needs to be reactive, so we return a function
-          return () => {
-            // Using val getter to access values without .val on each property
-            const { name, count, isActive, data } = this.val;
-
-            return tags.div(
-              tags.h2(`Hello, ${name}!`),
-              tags.p(`Count: ${count}`),
-              tags.p(`Active: ${isActive}`),
-              tags.p(`Data: ${JSON.stringify(data)}`),
-              tags.button(
-                {
-                  onclick: () => {
-                    // Can still set via the state objects
-                    (this as any).count.val++;
-                    (this as any).isActive.val = !(this as any).isActive.val;
-                  }
-                },
-                'Update'
-              )
-            );
-          };
-        }
-      }
-
-      if (!customElements.get(tag)) ValGetterElement.define(ValGetterElement, tag);
-      await customElements.whenDefined(tag);
-
-      const element = document.createElement(tag) as any;
-      container.appendChild(element);
-
-      await promisedTimeout();
-
-      // Check initial render
-      const h2 = element.renderRoot.querySelector('h2');
-      expect(h2?.textContent).toBe('Hello, World!');
-
-      const paragraphs = element.renderRoot.querySelectorAll('p');
-      expect(paragraphs[0].textContent).toBe('Count: 0');
-      expect(paragraphs[1].textContent).toBe('Active: false');
-      expect(paragraphs[2].textContent).toBe('Data: {"foo":"bar"}');
-
-      // Test val getter returns correct values
-      expect(element.val.name).toBe('World');
-      expect(element.val.count).toBe(0);
-      expect(element.val.isActive).toBe(false);
-      expect(element.val.data).toEqual({ foo: 'bar' });
-
-      // Click button to update
-      const button = element.renderRoot.querySelector('button');
-      button?.click();
-      await promisedTimeout();
-
-      // Check updated values via val getter
-      expect(element.val.count).toBe(1);
-      expect(element.val.isActive).toBe(true);
-
-      // Check updated render - re-query paragraphs after update
-      const updatedParagraphs = element.renderRoot.querySelectorAll('p');
-      expect(updatedParagraphs[0].textContent).toBe('Count: 1');
-      expect(updatedParagraphs[1].textContent).toBe('Active: true');
-
-      // Update via attributes
-      element.setAttribute('name', 'VanJS');
-      await promisedTimeout();
-
-      expect(element.val.name).toBe('VanJS');
-      const updatedH2 = element.renderRoot.querySelector('h2');
-      expect(updatedH2?.textContent).toBe('Hello, VanJS!');
-    });
-
     it('should handle computed properties and effects', async () => {
       const tag = uniqueTagName('reactive-element');
       class ReactiveElement extends VanReactiveElement {
@@ -705,14 +610,18 @@ describe('VanReactiveElement Integration Tests', () => {
       const tag = uniqueTagName('van-add-component');
 
       class VanAddComponent extends VanReactiveElement {
+        declare hello: State<string>;
+        declare world: State<string>;
+        declare zoom: State<object>;
+
         static properties = {
           hello: { default: 'Hello', type: String },
-          world: { default: { foo: 'bar' }, attribute: false }
+          world: { default: { foo: 'bar' }, attribute: false },
+          zoom: { attribute: false, default: 'replace with state' }
         };
 
         render() {
-          const self = this as InternalProperties;
-          return tags.div(tags.h2(self.hello), tags.p('Data: ', JSON.stringify(self.world)));
+          return tags.div(tags.h2(this.hello), tags.p('Data: ', JSON.stringify(this.world)));
         }
       }
 
@@ -723,10 +632,11 @@ describe('VanReactiveElement Integration Tests', () => {
       const wrapper = document.createElement('div');
       container.appendChild(wrapper);
 
-      // Use van.add to create the component
+      // Use van.add to create the component with van.tags
       const testHello = 'Created with van.add';
       const testWorld = { bar: 'foo' };
-      van.add(wrapper, van.tags[tag]({ hello: testHello, world: testWorld } as any));
+      const testZoom = van.state('dynamic');
+      van.add(wrapper, van.tags[tag]({ hello: testHello, world: testWorld, zoom: testZoom } as any));
 
       await promisedTimeout();
 
@@ -735,14 +645,20 @@ describe('VanReactiveElement Integration Tests', () => {
       expect(element.getAttribute('hello')).toBe(testHello);
       expect(element.hello.val).toBe(testHello);
 
-      expect(element.world).toEqual(testWorld);
+      expect(element.world.val).toEqual(testWorld);
+      expect(element.zoom.val).toEqual(testZoom.val);
 
-      // Verify no 'data' attribute exists on the element
-      expect(element.hasAttribute('data')).toBe(false);
+      // Verify no 'world' or 'zoom' attributes exist on the element
+      expect(element.hasAttribute('world')).toBe(false);
+      expect(element.hasAttribute('zoom')).toBe(false);
 
-      // Verify the data property contains the same object reference
-      const originalData = element.world;
-      expect(element.world).toBe(originalData);
+      // Update the zoom state and the property should update on the element as well
+      testZoom.val += ' text';
+
+      await promisedTimeout();
+
+      // Verify the world property updated
+      expect(element.zoom.val).toEqual(testZoom.val);
     });
 
     it('should work with define() when property has attribute: false and default object', async () => {
@@ -752,8 +668,8 @@ describe('VanReactiveElement Integration Tests', () => {
         tag,
         {
           hello: { type: String, default: 'Hello' },
-          world: { attribute: false, default: { foo: 'bar' } } as const,
-          zoom: { attribute: false, default: 'replace with state' } as const
+          world: { attribute: false, default: { foo: 'bar' } },
+          zoom: { attribute: false, default: 'replace with state' }
         },
         (props, { element, setStyles }) => {
           setStyles(css`
@@ -765,7 +681,7 @@ describe('VanReactiveElement Integration Tests', () => {
           `);
 
           element.render = () => {
-            return tags.div(tags.h2(props.hello), tags.p('Data: ', JSON.stringify(props.world)), tags.span(props.zoom));
+            return tags.div(tags.h2(props.hello), tags.p('Data: ', JSON.stringify(props.world.val)), tags.span(props.zoom.val));
           };
         }
       );
@@ -789,16 +705,12 @@ describe('VanReactiveElement Integration Tests', () => {
       expect(element.getAttribute('hello')).toBe(testHello);
       expect(element.hello.val).toBe(testHello);
 
-      expect(element.world).toEqual(testWorld);
-      expect(element.zoom).toEqual(testZoom.val);
+      expect(element.world.val).toEqual(testWorld);
+      expect(element.zoom.val).toEqual(testZoom.val);
 
       // Verify no 'world' or 'zoom' attributes exist on the element
       expect(element.hasAttribute('world')).toBe(false);
       expect(element.hasAttribute('zoom')).toBe(false);
-
-      // Verify the world property contains the same object reference
-      const originalData = element.world;
-      expect(element.world).toBe(originalData);
 
       // Update the zoom state and the property should update on the element as well
       testZoom.val += ' text';
@@ -806,7 +718,7 @@ describe('VanReactiveElement Integration Tests', () => {
       await promisedTimeout();
 
       // Verify the world property updated
-      expect(element.zoom).toEqual(testZoom.val);
+      expect(element.zoom.val).toEqual(testZoom.val);
     });
   });
 });
