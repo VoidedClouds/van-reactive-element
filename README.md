@@ -12,7 +12,6 @@ A lightweight web components library that seamlessly integrates [VanJS](https://
 - **Property Reflection** - Optionally reflect property changes back to attributes
 - **Developer Friendly** - TypeScript support, comprehensive lifecycle hooks
 - **Lightweight** - Minimal overhead on top of VanJS
-- **Convenient Property Access** - The `.val` getter provides easy access to unwrapped property values
 
 ## Installation
 
@@ -206,10 +205,6 @@ const TodoList = define(
 
       return dom;
     });
-
-    // Example of using the .val getter in functional components:
-    // props.val.title === props.title.val (for reactive properties)
-    // props.val.titlePropertyPostfix === props.titlePropertyPostfix (for non-reactive properties)
   }
 );
 // Note: The `define` function returns a custom element class, which can be subclassed or registered manually if needed.
@@ -268,10 +263,6 @@ Base class for creating web components with VanJS integration.
 - `shadowRootOptions` - Shadow root creation options (default: `{ mode: 'open' }`)
 - `styles` - Component CSS styles (scoped to shadow DOM). Use `css` tagged template literal or CSSStyleSheet for adopted stylesheets
 
-#### Instance Properties
-
-- `val` - Read-only getter providing access to unwrapped values of reactive properties. For state properties, returns the `.val` value; for non-reactive properties, returns the value directly
-
 #### Instance Methods
 
 - `createRenderRoot()` - Create the render root (override to return `this` for light DOM)
@@ -321,7 +312,6 @@ A custom element class, which can be subclassed or registered manually if needed
 1. **Reactivity**: Properties are not reactive by default. Use `van.state()` or `van.derive()` for reactive properties.
 2. **Element Naming**: You must provide the full custom element name (with hyphen) when calling `define`.
 3. **Property Binding**: Properties with attribute binding use `van.state` internally for reactivity.
-4. **The `.val` Getter**: Both class-based and functional components provide a `.val` getter for convenient access to unwrapped property values. This is especially useful in functional components where props are accessed through a proxy.
 
 ### Reactivity Patterns
 
@@ -349,64 +339,7 @@ VanJS Reactive Element supports two patterns for reactive rendering:
    }
    ```
 
-Use direct derive/state binding when possible for cleaner code. Use function-based rendering when you need to access `.val` or use computed properties that aren't van.derive states.
-
-### The `.val` Getter
-
-VanJS Reactive Element provides a convenient `.val` getter that returns unwrapped property values:
-
-```javascript
-class MyComponent extends VanReactiveElement {
-  static properties = {
-    name: { type: String, default: 'World' }, // Reactive (has attribute)
-    count: { type: Number, default: 0 }, // Reactive (has attribute)
-    data: { attribute: false, default: { x: 1 } } // Non-reactive (no attribute)
-  };
-
-  logValues() {
-    // Traditional access
-    console.log(this.name.val); // 'World' (unwrap State)
-    console.log(this.count.val); // 0 (unwrap State)
-    console.log(this.data); // { x: 1 } (direct value)
-
-    // Using .val getter (more convenient)
-    console.log(this.val.name); // 'World' (automatically unwrapped)
-    console.log(this.val.count); // 0 (automatically unwrapped)
-    console.log(this.val.data); // { x: 1 } (returned as-is)
-  }
-}
-```
-
-In functional components, the `.val` getter is available on the props object:
-
-```javascript
-define(
-  'my-component',
-  {
-    message: 'Hello',
-    count: { type: Number, default: 0 },
-    internal: { attribute: false, default: [] }
-  },
-  (props, ctx) => {
-    // Access unwrapped values via props.val
-    console.log(props.val.message); // 'Hello' (unwrapped from State)
-    console.log(props.val.count); // 0 (unwrapped from State)
-    console.log(props.val.internal); // [] (direct value)
-
-    ctx.render(() => {
-      const { div } = van.tags;
-      // You can use props.val in templates too
-      return div(`Message: ${props.val.message}, Count: ${props.val.count}`);
-    });
-  }
-);
-```
-
-The `.val` getter is particularly useful when:
-
-- You need to access multiple property values at once
-- You're working with mixed reactive and non-reactive properties
-- You want cleaner code without manually checking if a property is a State object
+Use direct derive/state binding when possible for cleaner code. Use function-based rendering when you need to access `.val` use computed properties that aren't van.derive states.
 
 #### Example: When to Use Each Pattern
 
