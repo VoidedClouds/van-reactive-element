@@ -351,7 +351,7 @@ describe('vanRE', () => {
         const defineSpy = vi.spyOn(customElements, 'define').mockImplementation(() => {});
 
         class MyButton extends VanReactiveElement {}
-        MyButton.define(MyButton, 'my-button');
+        MyButton.define('my-button');
 
         expect(defineSpy).toHaveBeenCalledWith('my-button', MyButton);
 
@@ -362,7 +362,7 @@ describe('vanRE', () => {
         const defineSpy = vi.spyOn(customElements, 'define').mockImplementation(() => {});
 
         class TestElement extends VanReactiveElement {}
-        TestElement.define(TestElement, 'custom-name');
+        TestElement.define('custom-name');
 
         expect(defineSpy).toHaveBeenCalledWith('custom-name', TestElement);
 
@@ -575,7 +575,7 @@ describe('vanRE', () => {
         throw new Error('Definition failed');
       });
       class TestElement extends VanReactiveElement {}
-      const result = TestElement.define(TestElement, 'test-element');
+      const result = TestElement.define('test-element');
       expect(result).toBe(TestElement);
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         '[VanReactiveElement] Failed to define custom element "test-element":',
@@ -585,26 +585,19 @@ describe('vanRE', () => {
       consoleErrorSpy.mockRestore();
     });
 
-    it('should handle define(undefined, undefined) by using "this" as the class and using the class name', () => {
+    it('should handle define() by using "this" as the class and using the class name', () => {
       class TestElement extends VanReactiveElement {}
       const result = TestElement.define();
       expect(result).toBe(TestElement);
       expect(customElements.get('test-element')).toBe(TestElement);
     });
 
-    it('should handle define(undefined, "custom-name") by using "this" with custom name', () => {
+    it('should handle define("custom-name") by using "this" with custom name', () => {
       class TestElement extends VanReactiveElement {}
       const customElementName = `custom-undefined-${Math.random().toString(36).substr(2, 9)}`;
-      const result = TestElement.define(undefined, customElementName);
+      const result = TestElement.define(customElementName);
       expect(result).toBe(TestElement);
       expect(customElements.get(customElementName)).toBe(TestElement);
-    });
-
-    it('should handle define(TestElement, undefined) by using the class name', () => {
-      class TestElementV2 extends VanReactiveElement {}
-      const result = TestElementV2.define(TestElementV2, undefined);
-      expect(result).toBe(TestElementV2);
-      expect(customElements.get('test-element-v2')).toBe(TestElementV2);
     });
   });
 

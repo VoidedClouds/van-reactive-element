@@ -182,7 +182,7 @@ export interface PropertyOptions<T = unknown> {
  *   }, props.label, ': ', props.count);
  * })
  */
-export interface SetupContext<E extends HTMLElement = HTMLElement> {
+export interface SetupContext<E extends VanReactiveElement = VanReactiveElement> {
   /** The custom element instance */
   element: E;
   /** Disable shadow DOM (use light DOM instead) */
@@ -243,14 +243,26 @@ export interface VanRE {
 
 // Export the main VanReactiveElement constructor interface
 /**
+ * Instance interface for VanReactiveElement
+ */
+export interface VanReactiveElement extends HTMLElement {
+  renderRoot: ShadowRoot | HTMLElement | null;
+  dispatchCustomEvent(typeName: string, options?: CustomEventInit): boolean;
+  hasShadowDOM(): boolean;
+  query(selector: string): Element | null;
+  queryAll(selector: string): NodeListOf<Element>;
+  registerDisposer(disposer: () => void): () => void;
+}
+
+/**
  * Constructor interface for VanReactiveElement
  */
 export interface VanReactiveElementConstructor {
-  new (): HTMLElement;
+  new (): VanReactiveElement;
   readonly properties: Record<string, PropertyOptions>;
   readonly shadowRootOptions: ShadowRootInit;
   readonly styles: string | CSSStyleSheet | null;
-  define(elementClass?: any, name?: string): any;
+  define(name?: string): any;
 }
 
 /**
@@ -318,9 +330,6 @@ export type SplitPropertiesWithSetter<A, S> = InferredAttributeProperties<A> &
   InferredStateProperties<S> & {
     set: SplitPropertySetter<A, S>;
   };
-
-// Export the instance type based on the constructor
-export type VanReactiveElement = InstanceType<VanReactiveElementConstructor>;
 
 const vanRE = (options: VanREOptions): VanRE => {
   const { rxScope = (fn) => (fn?.(), () => {}), van } = options;
@@ -637,12 +646,11 @@ const vanRE = (options: VanREOptions): VanRE => {
      * Defines a custom element based on its class if no parameters are provided,
      * generating the custom element name by converting the class from PascalCase/camelCase to kebab-case.
      * Example: A class named `MyButton` will be defined as `my-button`.
-     * @param {typeof VanReactiveElement} [elementClass] Optional class to define as a custom element.
      * @param {string} [name] Optional name of the custom element.
      * @returns {VanReactiveElement} The class itself for chaining.
      */
-    static define(elementClass?: any, name?: string): any {
-      const classToDefine = elementClass ?? this;
+    static define(name?: string): any {
+      const classToDefine = this;
       let tagName = name || classToDefine?.name;
 
       if (!tagName) {
@@ -882,8 +890,7 @@ const vanRE = (options: VanREOptions): VanRE => {
         }
       }
 
-      FunctionalElement.define(FunctionalElement, customElementName);
-      return FunctionalElement as VanReactiveElementConstructor;
+      return FunctionalElement.define(customElementName) as VanReactiveElementConstructor;
     }
   };
 };

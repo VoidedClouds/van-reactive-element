@@ -5,7 +5,7 @@ A lightweight web components library that seamlessly integrates [VanJS](https://
 ## Features
 
 - **Seamless VanJS Integration** - Use VanJS state and reactivity within web components
-- **Two Paradigms** - Choose between class-based or functional component styles inspired by [Lit](https://lit.dev) and [Solid Element](https://github.com/solidjs/solid/tree/main/packages/solid-element)
+- **Two Paradigms** - Choose between class or functional component styles inspired by [Lit](https://lit.dev) and [Solid Element](https://github.com/solidjs/solid/tree/main/packages/solid-element)
 - **Built-in Styling** - Scoped CSS support with shadow DOM encapsulation and adopted stylesheets
 - **Reactive by Design** - Automatic UI updates when state changes
 - **Attribute Syncing** - Automatic attribute to property conversion with type coercion
@@ -20,7 +20,7 @@ npm install vanjs-reactive-element vanjs-core
 
 ## Quick Links
 
-- [Examples](#examples) - Todo list from [VanJS](https://vanjs.org/demo#todo-list) implemented in both class-based or functional component styles
+- [Examples](#examples) - Todo list from [VanJS](https://vanjs.org/demo#todo-list) implemented in both class or functional component styles
 - [API Reference](#api) - Complete API documentation
 - [Reactivity Patterns](#reactivity-patterns) - Learn about rendering patterns
 - [Attributes & Properties](#attributes-and-properties) - Property configuration and type conversion
@@ -30,16 +30,92 @@ npm install vanjs-reactive-element vanjs-core
 
 ### Examples
 
-Both examples below implement the same simple todo functionality from [VanJS](https://vanjs.org/demo#todo-list) to demonstrate the differences between class-based and functional component patterns.
+#### Counter Example - Class Component
 
-#### Class-Based Component
+A simple counter component demonstrating basic state management:
 
-[Try on CodePen](https://codepen.io/VoidedClouds/pen/pvJRBME)
+[Try on CodePen](https://codepen.io/VoidedClouds/pen/)
 
 ```javascript
 import van from 'vanjs-core';
 import vanRE from 'vanjs-reactive-element';
 
+const { VanReactiveElement, css } = vanRE({ van });
+
+class CounterElement extends VanReactiveElement {
+  static properties = {
+    count: { attribute: false, default: 0 }
+  };
+
+  static get styles() {
+    return css`
+      button {
+        margin: 0 5px;
+      }
+    `;
+  }
+
+  render() {
+    const { button, p } = van.tags;
+
+    return [
+      p('Count: ', this.count),
+      button({ onclick: () => this.count.val-- }, 'Decrement'),
+      button({ onclick: () => this.count.val++ }, 'Increment')
+    ];
+  }
+}
+
+// Register the custom element
+CounterElement.define();
+
+// Use it
+van.add(document.body, van.tags['counter-element']());
+```
+
+#### Counter Example - Functional Component
+
+The same counter using the functional approach:
+
+[Try on CodePen](https://codepen.io/VoidedClouds/pen/)
+
+```javascript
+const CounterElement = define(
+  'counter-element',
+  {
+    properties: {
+      count: 0
+    },
+    styles: css`
+      button {
+        margin: 0 5px;
+      }
+    `
+  },
+  (props) => {
+    return () => {
+      const { button, p } = van.tags;
+
+      return [
+        p('Count: ', props.count),
+        button({ onclick: () => props.count.val-- }, 'Decrement'),
+        button({ onclick: () => props.count.val++ }, 'Increment')
+      ];
+    };
+  }
+);
+
+// Use it
+van.add(document.body, van.tags['counter-element']());
+```
+
+#### Todo List Example - Class Component
+
+A more complex example implementing todo functionality from [VanJS](https://vanjs.org/demo#todo-list):
+
+[Try on CodePen](https://codepen.io/VoidedClouds/pen/pvJRBME)
+
+```javascript
 // Extract VanReactiveElement and css helper from vanRE
 const { VanReactiveElement, css, define } = vanRE({ van });
 
@@ -135,7 +211,7 @@ van.add(document.body, todoList);
 
 > **Tip:** You can always use the native [`customElements.define`](https://developer.mozilla.org/en-US/docs/Web/API/CustomElementRegistry/define) method to register your component classes if you prefer. The provided `define` method is a convenience, but not required.
 
-#### Functional Component
+#### Todo List Example - Functional Component
 
 [Try on CodePen](https://codepen.io/VoidedClouds/pen/JodEQBG)
 
@@ -247,7 +323,7 @@ Initialize the VanJS Reactive Element library.
 
 **Returns:**
 
-- `VanReactiveElement` - Base class for creating class-based components
+- `VanReactiveElement` - Base class for creating class components
 - `css` - Tagged template literal for component styles
 - `define` - Function for creating functional components
 
@@ -282,9 +358,9 @@ Base class for creating web components with VanJS integration.
 
 #### Static Methods
 
-- `define(elementClass?, name?)` - Register the component as a custom element  
+- `define(name?)` - Register the component as a custom element  
   Defines a custom element using the provided name. The name must include a hyphen (per custom elements spec).
-  If no `elementClass` or `name` are provided the class and/or class name of the component will be used to register the custom element generating the custom element name by converting the class from PascalCase/camelCase to kebab-case.
+  If no `name` is provided, the class name of the component will be used to generate the custom element name by converting from PascalCase/camelCase to kebab-case.
 
 ### `define(customElementName, options, setup)`
 

@@ -54,7 +54,7 @@ describe('VanReactiveElement Integration Tests', () => {
         }
       }
 
-      if (!customElements.get(tag)) CounterElement.define(CounterElement, tag);
+      if (!customElements.get(tag)) CounterElement.define(tag);
       await customElements.whenDefined(tag);
 
       // Create and add to DOM
@@ -108,7 +108,7 @@ describe('VanReactiveElement Integration Tests', () => {
         }
       }
 
-      if (!customElements.get(tag)) LifecycleElement.define(LifecycleElement, tag);
+      if (!customElements.get(tag)) LifecycleElement.define(tag);
       await customElements.whenDefined(tag);
 
       const element = document.createElement(tag);
@@ -147,7 +147,7 @@ describe('VanReactiveElement Integration Tests', () => {
         }
       }
 
-      if (!customElements.get(tag)) EventElement.define(EventElement, tag);
+      if (!customElements.get(tag)) EventElement.define(tag);
       await customElements.whenDefined(tag);
 
       const element = document.createElement(tag) as any;
@@ -190,17 +190,18 @@ describe('VanReactiveElement Integration Tests', () => {
           `
         },
         (_props) => {
-          return () => tags.div(
-            { class: () => (_props.completed.val ? 'completed' : '') },
-            tags.input({
-              type: 'checkbox',
-              checked: _props.completed.val,
-              onchange: (e: Event) => {
-                _props.set.completed = (e.target as HTMLInputElement).checked;
-              }
-            }),
-            tags.span(() => _props.text.val)
-          );
+          return () =>
+            tags.div(
+              { class: () => (_props.completed.val ? 'completed' : '') },
+              tags.input({
+                type: 'checkbox',
+                checked: _props.completed.val,
+                onchange: (e: Event) => {
+                  _props.set.completed = (e.target as HTMLInputElement).checked;
+                }
+              }),
+              tags.span(() => _props.text.val)
+            );
         }
       );
 
@@ -235,14 +236,15 @@ describe('VanReactiveElement Integration Tests', () => {
           }
         },
         (_props: any, { element }: any) => {
-          return () => tags.li(
-            {
-              onclick: () => {
-                element.dispatchCustomEvent('item-click', { detail: _props.value.val, bubbles: true });
-              }
-            },
-            () => _props.value.val
-          );
+          return () =>
+            tags.li(
+              {
+                onclick: () => {
+                  element.dispatchCustomEvent('item-click', { detail: _props.value.val, bubbles: true });
+                }
+              },
+              () => _props.value.val
+            );
         }
       );
 
@@ -455,7 +457,7 @@ describe('VanReactiveElement Integration Tests', () => {
         }
       }
 
-      if (!customElements.get(tag)) ReactiveElement.define(ReactiveElement, tag);
+      if (!customElements.get(tag)) ReactiveElement.define(tag);
       await customElements.whenDefined(tag);
 
       const element = document.createElement(tag) as any;
@@ -584,7 +586,7 @@ describe('VanReactiveElement Integration Tests', () => {
         }
       }
 
-      if (!customElements.get(tag)) QueryTestElement.define(QueryTestElement, tag);
+      if (!customElements.get(tag)) QueryTestElement.define(tag);
       await customElements.whenDefined(tag);
 
       const element = document.createElement(tag) as any;
@@ -618,7 +620,7 @@ describe('VanReactiveElement Integration Tests', () => {
           );
         }
       }
-      if (!customElements.get(tag)) UserCard.define(UserCard, tag);
+      if (!customElements.get(tag)) UserCard.define(tag);
       await customElements.whenDefined(tag);
       const element = document.createElement(tag) as any;
       element.setAttribute('name', 'John Doe');
@@ -669,7 +671,7 @@ describe('VanReactiveElement Integration Tests', () => {
             tags.button(
               {
                 'aria-pressed': props.pressed,
-                onclick: () => (ctx.element.pressed = !ctx.element.pressed.val)
+                onclick: () => (props.set.pressed = !props.pressed.val)
               },
               props.label
             );
@@ -718,7 +720,7 @@ describe('VanReactiveElement Integration Tests', () => {
         }
       }
 
-      if (!customElements.get(tag)) VanAddComponent.define(VanAddComponent, tag);
+      if (!customElements.get(tag)) VanAddComponent.define(tag);
       await customElements.whenDefined(tag);
 
       // Create element using van.add
