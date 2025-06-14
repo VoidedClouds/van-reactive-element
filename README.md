@@ -118,9 +118,9 @@ const titlePropertyPostfix = van.state(new Date().toLocaleTimeString());
 
 // Create the todo-list element and set its attribute postfix
 const todoList = van.tags['todo-list']({
-  'title-attribute-postfix': 'Attribute Postfix'
+  'title-attribute-postfix': 'Attribute Postfix',
+  titlePropertyPostfix
 });
-todoList.titlePropertyPostfix = titlePropertyPostfix; // Bind property postfix
 
 // Update postfixes every second
 const intervalId = setInterval(() => {
@@ -217,9 +217,9 @@ const titlePropertyPostfix = van.state(new Date().toLocaleTimeString());
 
 // Create the todo-list element, set attribute postfix
 const todoList = van.tags['todo-list']({
-  'title-attribute-postfix': 'Attribute Postfix'
+  'title-attribute-postfix': 'Attribute Postfix',
+  titlePropertyPostfix
 });
-todoList.titlePropertyPostfix = titlePropertyPostfix; // Bind property postfix
 
 // Update postfixes every second
 const intervalId = setInterval(() => {
