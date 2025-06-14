@@ -16,6 +16,10 @@
       "types": "./types/van-reactive-element.d.ts",
       "import": "./dist/van-reactive-element.module.js",
       "require": "./dist/van-reactive-element.cjs"
+    },
+    "./dev": {
+      "types": "./types/van-reactive-element.d.ts",
+      "import": "./dist/van-reactive-element.dev.module.js"
     }
   },
   "scripts": {
