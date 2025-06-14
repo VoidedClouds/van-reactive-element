@@ -34,7 +34,7 @@ npm install vanjs-reactive-element vanjs-core
 
 A simple counter component demonstrating basic state management:
 
-[Try on CodePen](https://codepen.io/VoidedClouds/pen/)
+[Try on CodePen](https://codepen.io/VoidedClouds/pen/jEPKwbL)
 
 ```javascript
 import van from 'vanjs-core';
@@ -77,7 +77,7 @@ van.add(document.body, van.tags['counter-element']());
 
 The same counter using the functional approach:
 
-[Try on CodePen](https://codepen.io/VoidedClouds/pen/)
+[Try on CodePen](https://codepen.io/VoidedClouds/pen/myJKwVJ)
 
 ```javascript
 const CounterElement = define(
@@ -92,7 +92,7 @@ const CounterElement = define(
       }
     `
   },
-  (props) => {
+  (props, { element, noShadowDOM, onCleanup, onMount }) => {
     return () => {
       const { button, p } = van.tags;
 
