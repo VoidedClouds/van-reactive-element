@@ -1,17 +1,16 @@
 # Van Reactive Element
 
-A lightweight web components library that seamlessly integrates [VanJS](https://vanjs.org/) with custom elements, supporting any reactivity system. Build reactive web components with minimal boilerplate and maximum flexibility.
+A lightweight web components library that seamlessly integrates [VanJS](https://vanjs.org/) with custom elements. Build reactive web components with minimal boilerplate and maximum flexibility.
 
 ## Features
 
 - **Seamless VanJS Integration** - Use VanJS state and reactivity within web components
-- **Two Paradigms** - Choose between class-based or functional component styles
+- **Two Paradigms** - Choose between class-based or functional component styles inspired by [Lit](https://lit.dev) and [Solid Element](https://github.com/solidjs/solid/tree/main/packages/solid-element)
 - **Built-in Styling** - Scoped CSS support with shadow DOM encapsulation and adopted stylesheets
 - **Reactive by Design** - Automatic UI updates when state changes
 - **Attribute Syncing** - Automatic attribute to property conversion with type coercion
 - **Property Reflection** - Optionally reflect property changes back to attributes
 - **Developer Friendly** - TypeScript support, comprehensive lifecycle hooks
-- **Lightweight** - Minimal overhead on top of VanJS
 
 ## Installation
 
@@ -145,19 +144,23 @@ van.add(document.body, todoList);
 const TodoList = define(
   'todo-list',
   {
-    // Props with default values and types (Props are Attributes by default)
-    title: { default: 'Todo List', type: String },
-    titleAttributePostfix: 'Will be replaced',
-    titlePropertyPostfix: { attribute: false, default: 'Will also be replaced' }
-  },
-  (props, { element, noShadowDOM, onCleanup, onMount, render, setStyles }) => {
-    // Set component styles
-    setStyles(css`
+    // Attributes (reactive, read-only via props, settable via props.set)
+    attributes: {
+      title: { type: String, default: 'Todo List' },
+      titleAttributePostfix: { type: String, default: 'Will be replaced' }
+    },
+    // Properties (reactive, read-write directly)
+    properties: {
+      titlePropertyPostfix: 'Will also be replaced'
+    },
+    // Component styles
+    styles: css`
       a {
         cursor: pointer;
       }
-    `);
-
+    `
+  },
+  (props, { element, noShadowDOM, onCleanup, onMount }) => {
     // Factory for creating a todo item component
     const createTodoItem = (text) => {
       const done = van.state(false); // Track if todo is done
@@ -180,8 +183,8 @@ const TodoList = define(
             );
     };
 
-    // Main render function for the todo list
-    render(() => {
+    // Return the render function for the todo list
+    return () => {
       const { div, h2, input, button } = van.tags;
       const inputDom = input({ type: 'text' }); // Input for new todos
       const count = van.state(0); // Count of add clicks
@@ -204,7 +207,7 @@ const TodoList = define(
       );
 
       return dom;
-    });
+    };
   }
 );
 // Note: The `define` function returns a custom element class, which can be subclassed or registered manually if needed.
@@ -273,9 +276,9 @@ Base class for creating web components with VanJS integration.
 - `query(selector)` - Query single element within render root
 - `queryAll(selector)` - Query all elements within render root
 - `registerDisposer(fn)` - Register a cleanup function
-- `render()` - Define the component template. Returns either:
-  - A template directly with state objects for automatic reactivity: `div(this.myState)`
-  - A function returning a template for computed values or when using `.val`: `() => div(this.computed)`
+- `render()` - Define the component's content. Returns either:
+  - Content directly with state objects for automatic reactivity: `div(this.myState)`
+  - A function returning content for computed values or when using `.val`: `() => display.val ? div(this.myState) : ''`
 
 #### Static Methods
 
@@ -283,39 +286,97 @@ Base class for creating web components with VanJS integration.
   Defines a custom element using the provided name. The name must include a hyphen (per custom elements spec).
   If no `elementClass` or `name` are provided the class and/or class name of the component will be used to register the custom element generating the custom element name by converting the class from PascalCase/camelCase to kebab-case.
 
-### `define(customElementName, properties, setup)`
+### `define(customElementName, options, setup)`
 
 Create a functional component.
 
 **Parameters:**
 
 - `customElementName` - Custom element name (must include a hyphen)
-- `properties` - Property definitions (object with default values)
-- `setup` - Setup function called once per instance
+- `options` - Component configuration object:
+  - `attributes` - Attribute property definitions (become StateView - read-only)
+  - `properties` - Internal property definitions (become State - read-write)
+  - `styles` - Component styles (use `css` tagged template literal or CSSStyleSheet)
+  - `shadowRootOptions` - Shadow root configuration (default: `{ mode: 'open' }`)
+- `setup` - Setup function called once per instance that returns the render function
 
 **Returns:**  
 A custom element class, which can be subclassed or registered manually if needed.
 
 **Setup Function Parameters:**
 
-- `props` - Reactive property accessors
-  - Properties are VanJS State objects
-  - Reading values: `props.name.val`
-  - Setting values: `props.name = 'new value'` (direct assignment)
-  - In TypeScript: Cast to `any` if needed: `(props as any).name = 'new value'`
+- `props` - Reactive property accessors with split API:
+  - **Attributes** (read-only): `props.attributeName` is a StateView
+    - Reading: `props.attributeName.val` or direct binding `props.attributeName` in templates
+    - Setting: Use the universal setter `props.set.attributeName = 'new value'`
+  - **Properties** (read-write): `props.propertyName` is a State
+    - Reading: `props.propertyName.val` or direct binding `props.propertyName` in templates
+    - Setting: `props.propertyName.val = { new: 'value' }` to update the State value or use the universal setter `props.propertyName = 'new value'` to update the State value or replace the State
+  - **Universal setter**: `props.set.attributeOrPropertyName = value` works for both types
 - `context` - Component context object:
   - `element` - The element instance
   - `noShadowDOM()` - Disable shadow DOM
   - `onCleanup(fn)` - Set cleanup callback
   - `onMount(fn)` - Set mount callback
-  - `render(fn)` - Set render function
-  - `setStyles(styles)` - Set component styles (use `css` tagged template literal or CSSStyleSheet)
+
+**Setup Function Returns:**
+The setup function must return a render function that defines the component's content, or nothing (void) if no rendering is needed.
 
 ### Important Notes
 
 1. **Reactivity**: Properties are not reactive by default. Use `van.state()` or `van.derive()` for reactive properties.
 2. **Element Naming**: You must provide the full custom element name (with hyphen) when calling `define`.
 3. **Property Binding**: Properties with attribute binding use `van.state` internally for reactivity.
+4. **Split API in Functional Components**:
+   - Attributes are read-only (`StateView`) - use `props.set.attrName = value` to update
+   - Internal properties are read-write (`State`) - can be updated directly with `props.propName = value`
+
+#### Example: Split API Usage
+
+```javascript
+define(
+  'my-component',
+  {
+    attributes: {
+      // These become StateView (read-only)
+      name: { type: String, default: 'World' },
+      count: { type: Number, default: 0 }
+    },
+    properties: {
+      // These become State (read-write)
+      data: { foo: 'bar' },
+      items: []
+    }
+  },
+  (props) => {
+    // Reading attributes (StateView)
+    console.log(props.name.val); // "World"
+
+    // Setting attributes via universal setter
+    props.set.name = 'Hello';
+    props.set.count = 42;
+
+    // Reading/writing properties
+    // props.data = { foo: 'updated' };  // ❌ Requires type casting in TypeScript
+    props.data.val = { foo: 'updated' }; // ✅ Updates value properly
+    props.items.val.push('new item'); // ✅ Modifying array contents
+
+    // Using universal setter (recommended)
+    props.set.data = { foo: 'via setter' }; // ✅ Type-safe value update
+
+    // Return render function
+    return () =>
+      div(
+        'Name: ',
+        () => props.name.val,
+        ' Count: ',
+        () => props.count.val,
+        ' Data: ',
+        () => JSON.stringify(props.data.val)
+      );
+  }
+);
+```
 
 ### Reactivity Patterns
 
@@ -511,24 +572,27 @@ console.log(element.getAttribute('status')); // "completed"
 const ToggleButton = define(
   'toggle-button',
   {
-    pressed: {
-      type: Boolean,
-      default: false,
-      reflect: true,
-      attribute: 'aria-pressed' // Property with custom ARIA attribute name
-    },
-    label: {
-      type: String,
-      default: 'Toggle'
+    attributes: {
+      pressed: {
+        type: Boolean,
+        default: false,
+        reflect: true,
+        attribute: 'aria-pressed' // Property with custom ARIA attribute name
+      },
+      label: {
+        type: String,
+        default: 'Toggle'
+      }
     }
   },
   (props, { element }) => {
-    element.render = () => {
+    return () => {
       const { button } = van.tags;
+
       return button(
         {
           'aria-pressed': props.pressed,
-          onclick: () => (element.pressed = !element.pressed)
+          onclick: () => (props.set.pressed = !props.pressed.val)
         },
         props.label
       );

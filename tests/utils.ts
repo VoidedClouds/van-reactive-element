@@ -1,9 +1,10 @@
-import van, { type ChildDom } from 'vanjs-core';
+import van from 'vanjs-core';
 export { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import vanRE, { type State } from '../src/index';
+import vanRE, { type ChildDom, type State, type Van, type VanReactiveElementConstructor } from '../src/index';
 
-export { ChildDom, State, van };
+export type { ChildDom, State, Van, VanReactiveElementConstructor };
+export { van };
 export const tags = van.tags;
 export const { VanReactiveElement, define } = vanRE({ van });
 

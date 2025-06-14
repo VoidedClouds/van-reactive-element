@@ -1,10 +1,10 @@
-import type { State, Van } from 'vanjs-core';
+import type { ChildDom, State, StateView, Van } from 'vanjs-core';
 import { camelAndPascalToKebab, converters, defaultConverter, type AttributeConverter } from './property-utils';
 import { css } from './syntax-utils';
 
 // Re-export AttributeConverter for external use
 export type { AttributeConverter } from './property-utils';
-export type { State } from 'vanjs-core';
+export type { ChildDom, State, StateView, Van };
 
 // Export all interfaces for external use
 /**
@@ -43,25 +43,74 @@ export interface VanREOptions {
  * }
  * ```
  *
- * 2. Functional Components:
+ * 2. Functional Components with options object:
  * ```typescript
  * define('my-component', {
- *   name: 'John',                            // State<string>
- *   data: { attribute: false, default: {} }  // State<{}>
+ *   // Attributes (all get StateView - read-only)
+ *   // Must specify type for proper serialization
+ *   attributes: {
+ *     name: { type: String, default: 'John' },
+ *     count: { type: Number, default: 0 },
+ *     active: { type: Boolean, reflect: true },
+ *     label: { type: String }  // No default is fine
+ *   },
+ *
+ *   // Internal properties (all get State - read-write)
+ *   // MUST be simple values, not PropertyOptions
+ *   properties: {
+ *     data: { foo: 'bar' },    // Object literal
+ *     cache: [],               // Empty array
+ *     loading: false,          // Boolean
+ *     message: ''              // Empty string
+ *   },
+ *
+ *   // Optional styles
+ *   styles: `
+ *     :host { display: block; }
+ *     button { padding: 8px; }
+ *   `
  * }, (props) => {
- *   const typed: string = props.name.val;    // Access State value
- *   const plain: {} = props.data.val;        // All props are States
- * })
+ *   // Attribute properties are StateView (read-only)
+ *   const name = props.name.val;          // ✓ Can read
+ *   // props.name.val = 'Jane';           // ✗ Error: readonly
+ *
+ *   // Internal properties are State (read-write)
+ *   props.data.val = { foo: 'new' };      // ✓ Can modify
+ *   props.cache.val.push('item');         // ✓ Direct mutation
+ *   props.loading.val = true;             // ✓ Direct assignment
+ *
+ *   // Universal setter for all properties
+ *   props.set.name = 'Jane';              // ✓ Attributes
+ *   props.set.data = { foo: 'bar' };      // ✓ Properties
+ *
+ *   // Return the render function
+ *   return () => button(
+ *     { onclick: () => props.set.count = props.count.val + 1 },
+ *     props.label, ': ', props.count
+ *   );
+ * });
+ *
+ * // With custom shadow root options and styles
+ * define('closed-component', {
+ *   attributes: { name: { type: String, default: 'Shadow' } },
+ *   properties: { internal: 'state' },
+ *   shadowRootOptions: { mode: 'closed', delegatesFocus: true },
+ *   styles: `:host { display: inline-block; }`
+ * }, (props) => {
+ *   return () => span(props.name);
+ * });
  * ```
  *
- * 3. Direct State assignment:
+ * 3. Direct State assignment in class components:
  * ```typescript
  * class MyElement extends VanReactiveElement {
  *   static properties = { count: 0 };
  *
  *   increment() {
- *     this.count = van.state(100);  // Can assign State directly
- *     this.count = 50;              // Or plain values
+ *     // Runtime accepts both State<T> and plain values
+ *     this.count = van.state(100);  // Assign State directly
+ *     this.count = 50;              // Assign plain value
+ *     this.count.val = 75;          // Modify via .val
  *   }
  * }
  * ```
@@ -116,23 +165,24 @@ export interface PropertyOptions<T = unknown> {
  * Context object provided to functional component setup
  * @template E - The element type
  * @example
- * define('my-component', { count: 0 }, (props, ctx) => {
- *   ctx.setStyles(`
+ * define('my-component', {
+ *   attributes: { label: { type: String, default: 'Click me' } },
+ *   properties: { count: 0 },
+ *   styles: `
  *     :host { display: block; }
  *     button { padding: 8px; }
- *   `);
- *
- *   ctx.render(() =>
- *     button({ onclick: () => props.count++ },
- *       'Count: ', props.count
- *     )
- *   );
- *
+ *   `
+ * }, (props, ctx) => {
  *   ctx.onMount(() => console.log('Component mounted'));
  *   ctx.onCleanup(() => console.log('Component cleanup'));
+ *
+ *   // Return the render function
+ *   return () => button({
+ *     onclick: () => props.set.count = props.count.val + 1
+ *   }, props.label, ': ', props.count);
  * })
  */
-export interface SetupContext<E extends VanReactiveElement = VanReactiveElement> {
+export interface SetupContext<E extends HTMLElement = HTMLElement> {
   /** The custom element instance */
   element: E;
   /** Disable shadow DOM (use light DOM instead) */
@@ -141,49 +191,62 @@ export interface SetupContext<E extends VanReactiveElement = VanReactiveElement>
   onCleanup: (fn: () => void) => void;
   /** Register mount function called after initial render */
   onMount: (fn: () => void) => void;
-  /** Set the render function for the component */
-  render: (fn: () => unknown) => void;
-  /** Set component styles (scoped to shadow DOM) */
-  setStyles: (styles: string | CSSStyleSheet) => void;
 }
 
 /**
- * Property definitions for components.
- * Can use simple values as defaults or full PropertyOptions for more control.
+ * Property definitions for attributes.
+ * Must use PropertyOptions with at least a type specified.
  *
  * @example
  * {
- *   // Simple defaults (will have attributes)
- *   name: 'John',
- *   count: 0,
- *
- *   // Full configuration
- *   active: { type: Boolean, reflect: true },
- *   data: { attribute: false, default: { foo: 'bar' } } // No attribute
+ *   // Type is required for proper serialization
+ *   name: { type: String },                          // No default
+ *   count: { type: Number, default: 0 },             // With default
+ *   active: { type: Boolean, reflect: true },        // With reflection
+ *   label: { type: String, attribute: 'aria-label' } // Custom attribute name
  * }
  */
-export type PropertyDefinitions<T = Record<string, unknown>> = {
-  [K in keyof T]: T[K] | PropertyOptions<T[K]>;
+export type PropertyDefinitions = {
+  [key: string]: PropertyOptions;
 };
 
-export type DefineFunction = <T extends PropertyDefinitions>(
+/**
+ * State definitions are simple key-value pairs
+ */
+export type StateDefinitions = Record<string, any>;
+
+/**
+ * Options for defining a custom element
+ */
+export interface DefineOptions<A extends PropertyDefinitions = PropertyDefinitions, S extends StateDefinitions = StateDefinitions> {
+  /** Properties that sync with DOM attributes (become StateView) */
+  attributes?: A;
+  /** Internal properties on the instance (become State) */
+  properties?: S;
+  /** Optional shadow root configuration */
+  shadowRootOptions?: ShadowRootInit;
+  /** Component styles (scoped to shadow DOM) */
+  styles?: string | CSSStyleSheet;
+}
+
+export type DefineFunction = <A extends PropertyDefinitions, S extends StateDefinitions>(
   customElementName: string,
-  properties?: T,
-  setup?: (props: InferredProperties<T>, context: SetupContext) => void
-) => VanReactiveElementClass;
+  options: DefineOptions<A, S>,
+  setup: (props: SplitPropertiesWithSetter<A, S>, context: SetupContext) => (() => unknown) | void
+) => VanReactiveElementConstructor;
 
 export interface VanRE {
-  VanReactiveElement: VanReactiveElementClass;
+  VanReactiveElement: VanReactiveElementConstructor;
   css: (template: TemplateStringsArray, ...values: any[]) => string;
   define: DefineFunction;
 }
 
-// Export the main VanReactiveElement class interface
+// Export the main VanReactiveElement constructor interface
 /**
- * Class constructor interface for VanReactiveElement
+ * Constructor interface for VanReactiveElement
  */
-export interface VanReactiveElementClass<T extends VanReactiveElement = VanReactiveElement> {
-  new (): T;
+export interface VanReactiveElementConstructor {
+  new (): HTMLElement;
   readonly properties: Record<string, PropertyOptions>;
   readonly shadowRootOptions: ShadowRootInit;
   readonly styles: string | CSSStyleSheet | null;
@@ -214,56 +277,50 @@ type InferFromType<T> = T extends StringConstructor
   : unknown;
 
 /**
- * Infers the runtime type of a property from its definition.
- * All properties are wrapped in State<T> for consistent reactivity
- * Priority: explicit type in PropertyOptions<T> > default value > type property > fallback
+ * Infers attribute properties as StateView (read-only)
+ * Handles PropertyOptions with default values, type hints, etc.
  */
-export type InferredPropertyType<T> = T extends { default: infer D }
-  ? State<D>
-  : T extends { type: infer Type }
-  ? State<InferFromType<Type>>
-  : T extends PropertyOptions<infer U>
-  ? State<U>
-  : State<T>;
-
-/**
- * Infers the runtime props type from property definitions.
- * All properties become State<T> for consistent reactivity
- *
- * @example
- * const props = {
- *   name: 'World',                           // → State<string> (from value)
- *   count: { type: Number, default: 0 },     // → State<number> (from default)
- *   active: { type: Boolean },               // → State<boolean> (from type)
- *   data: { attribute: false, default: {} }  // → State<{}> (from default)
- *   items: { type: Array } as const         // → State<unknown[]> (from type)
- * };
- *
- * type Props = InferredProperties<typeof props>;
- * // Props = {
- * //   name: State<string>,
- * //   count: State<number>,
- * //   active: State<boolean>,
- * //   data: State<{}>,
- * //   items: State<unknown[]>
- * // }
- */
-export type InferredProperties<T> = {
-  [K in keyof T]: InferredPropertyType<T[K]>;
+export type InferredAttributeProperties<T> = {
+  [K in keyof T]: T[K] extends { default: infer D }
+    ? StateView<D>
+    : T[K] extends { type: infer Type }
+    ? StateView<InferFromType<Type>>
+    : T[K] extends PropertyOptions<infer U>
+    ? StateView<U>
+    : StateView<T[K]>;
 };
 
-export interface VanReactiveElement extends HTMLElement {
-  readonly renderRoot: ShadowRoot | HTMLElement | null;
-  createRenderRoot(): ShadowRoot | HTMLElement;
-  onCleanup?(): void;
-  onMount?(): void;
-  render?(): unknown;
-  registerDisposer(disposer: () => void): () => void;
-  hasShadowDOM(): boolean;
-  query<E extends Element = Element>(selector: string): E | null;
-  queryAll<E extends Element = Element>(selector: string): NodeListOf<E>;
-  dispatchCustomEvent<T = any>(typeName: string, options?: CustomEventInit<T>): boolean;
-}
+/**
+ * Infers state properties as State (read-write)
+ * State definitions are always simple values, not PropertyOptions
+ */
+export type InferredStateProperties<T> = {
+  [K in keyof T]: State<T[K]>;
+};
+
+/**
+ * Extract the inner type from StateView or State
+ */
+type UnwrapReactiveType<T> = T extends StateView<infer U> ? U : T extends State<infer U> ? U : T;
+
+/**
+ * Type for the split property setter that accepts plain values
+ * Automatically unwraps StateView and State types
+ */
+export type SplitPropertySetter<A, S> = {
+  [K in keyof (A & S)]: UnwrapReactiveType<K extends keyof S ? State<S[K]> : K extends keyof A ? InferredAttributeProperties<A>[K] : never>;
+};
+
+/**
+ * Combined properties for split definition with setter
+ */
+export type SplitPropertiesWithSetter<A, S> = InferredAttributeProperties<A> &
+  InferredStateProperties<S> & {
+    set: SplitPropertySetter<A, S>;
+  };
+
+// Export the instance type based on the constructor
+export type VanReactiveElement = InstanceType<VanReactiveElementConstructor>;
 
 const vanRE = (options: VanREOptions): VanRE => {
   const { rxScope = (fn) => (fn?.(), () => {}), van } = options;
@@ -310,7 +367,7 @@ const vanRE = (options: VanREOptions): VanRE => {
    * /// Register the element as <counter-element />
    * CounterElement.define();
    */
-  class VanReactiveElementImpl extends HTMLElement {
+  class VanReactiveElementClass extends HTMLElement {
     /** @protected */
     renderRoot: ShadowRoot | HTMLElement | null = null; // Initialize renderRoot
 
@@ -386,7 +443,7 @@ const vanRE = (options: VanREOptions): VanRE => {
       if (!propName) return;
       if (this._reflectingProperty === propName) return; // Prevent loop
 
-      const ctor = this.constructor as typeof VanReactiveElementImpl;
+      const ctor = this.constructor as VanReactiveElementConstructor;
       const options = ctor.properties[propName];
       if (!options) return;
 
@@ -413,7 +470,7 @@ const vanRE = (options: VanREOptions): VanRE => {
       if (!this._isSetupComplete) {
         this.registerDisposer(
           rxScope(() => {
-            // Render the component's template
+            // Render the component's content
             if (this.renderRoot && this.render) {
               van.add(this.renderRoot as Element, this.render() as Parameters<Van['add']>[1]);
             }
@@ -422,7 +479,7 @@ const vanRE = (options: VanREOptions): VanRE => {
 
             // Call onMount after the initial setup DOM is rendered
             requestAnimationFrame(() => {
-              this._isSetupComplete && this.onMount?.();
+              this.isConnected && this._isSetupComplete && this.onMount?.();
             });
           })
         );
@@ -456,21 +513,21 @@ const vanRE = (options: VanREOptions): VanRE => {
     // --- Custom Lifecycle Callbacks ---
 
     /**
-     * Creates the root node where the component's template will be rendered.
+     * Creates the root node where the component's content will be rendered.
      * By default, creates and returns an open shadow root.
      * Override to customize shadow root options or render to light DOM (by returning `this`).
      * @returns {ShadowRoot | HTMLElement} The node to render into.
      * @protected
      */
-    createRenderRoot(): ShadowRoot | HTMLElement {
-      return this.shadowRoot ?? this.attachShadow((this.constructor as typeof VanReactiveElementImpl).shadowRootOptions);
+    protected createRenderRoot(): ShadowRoot | HTMLElement {
+      return this.shadowRoot ?? this.attachShadow((this.constructor as VanReactiveElementConstructor).shadowRootOptions);
     }
 
     /**
      * Called after the component's disconnected.
      * @protected
      */
-    onCleanup(): void {
+    protected onCleanup(): void {
       // No-op. Override in subclasses.
     }
 
@@ -478,14 +535,14 @@ const vanRE = (options: VanREOptions): VanRE => {
      * Called after the component's initial setup and DOM creation.
      * @protected
      */
-    onMount(): void {
+    protected onMount(): void {
       // No-op. Override in subclasses.
     }
 
     /**
-     * Defines the component's template. Override in subclasses to provide the UI structure.
+     * Defines the component's content. Override in subclasses to provide the UI structure.
      *
-     * @returns {unknown} The template to render. This can be any valid VanJS content.
+     * @returns {unknown} The content to render. This can be any valid VanJS content.
      * @protected
      *
      * @example
@@ -498,7 +555,7 @@ const vanRE = (options: VanREOptions): VanRE => {
      *
      * // The returned function is called automatically when reactive dependencies change.
      */
-    render?(): unknown;
+    protected render?(): unknown;
 
     // --- Automatic Cleanup ---
 
@@ -508,7 +565,6 @@ const vanRE = (options: VanREOptions): VanRE => {
      *
      * @param {Function} disposer - A function to call when the component is disconnected.
      * @returns {Function} The disposer that was passed in, for chaining.
-     * @protected
      *
      * @example
      * this.registerDisposer(() => {
@@ -711,10 +767,10 @@ const vanRE = (options: VanREOptions): VanRE => {
       }
 
       // For string styles, check if already exists
-      if (!this.renderRoot.querySelector("style[data-managed-by='vre']")) {
+      if (!this.renderRoot.querySelector('style[vre\\:style]')) {
         if (typeof styles === 'string') {
           const styleEl = document.createElement('style');
-          styleEl.setAttribute('data-managed-by', 'vre'); // Mark the style tag
+          styleEl.setAttribute('vre:style', ''); // Mark the style tag
           styleEl.textContent = styles;
           this.renderRoot.prepend(styleEl); // Prepend styles
         }
@@ -723,61 +779,88 @@ const vanRE = (options: VanREOptions): VanRE => {
   }
 
   return {
-    VanReactiveElement: VanReactiveElementImpl as VanReactiveElementClass,
+    VanReactiveElement: VanReactiveElementClass as VanReactiveElementConstructor,
     css,
     /**
-     * Defines a custom element using a functional setup, similar to solid-element's customElement.
-     * @param {string} customElementName - The custom element name (e.g., 'my-component').
-     * @param {object} properties - Property definitions (name: defaultValue or {type, default}).
-     * @param {function} setup - Function(props, context) called once per element instance.
+     * Defines a custom element with consolidated options.
+     * @param customElementName - The custom element name (e.g., 'my-component')
+     * @param options - Configuration object with attributes, properties, shadowRootOptions, and styles
+     * @param setup - Setup function called once per element instance that returns the render function
      */
-    define: <T extends PropertyDefinitions>(
+    define: <A extends PropertyDefinitions, S extends StateDefinitions>(
       customElementName: string,
-      properties: T = {} as T,
-      setup?: (props: InferredProperties<T>, context: SetupContext) => void
+      options: DefineOptions<A, S>,
+      setup: (props: SplitPropertiesWithSetter<A, S>, context: SetupContext) => (() => unknown) | void
     ) => {
-      class FunctionalElement extends VanReactiveElementImpl {
-        static properties = fromEntries(
-          entries(properties).map(([key, val]) => {
-            if (
-              typeof val === 'object' &&
-              val !== null &&
-              ('default' in val || 'type' in val || 'attribute' in val || 'converter' in val || 'reflect' in val)
-            ) {
-              return [key, val as PropertyOptions];
-            }
-            // Simple value is the default
-            return [key, { default: val } as PropertyOptions];
-          })
-        );
+      const { attributes = {} as A, properties = {} as S, shadowRootOptions, styles } = options;
+      // Merge properties, marking internal properties with attribute: false
+      // Attributes are already PropertyOptions, properties need formatting
 
-        static _dynamicStyles: string | CSSStyleSheet | null = null; // Store dynamic styles
+      class FunctionalElement extends VanReactiveElementClass {
+        static properties = {
+          ...attributes,
+          ...fromEntries(entries(properties).map(([key, value]) => [key, { default: value, attribute: false }]))
+        };
+
+        static get shadowRootOptions(): ShadowRootInit {
+          return shadowRootOptions || super.shadowRootOptions;
+        }
 
         static get styles() {
-          return this._dynamicStyles || super.styles;
+          return styles || super.styles;
         }
 
         constructor() {
           super();
 
-          // Gather props
-          const props = new Proxy({} as InferredProperties<T>, {
-            get: (_, key: string) => (this as InternalProperties)[key],
+          // Create setter proxy object
+          const setter = new Proxy({} as SplitPropertySetter<any, any>, {
+            get: (_, key: string) => {
+              // Return undefined for non-existent properties
+              const properties = (this.constructor as VanReactiveElementConstructor).properties;
+              if (!(key in properties)) return undefined;
+
+              // Return current value for getter
+              return (this as InternalProperties)[key]?.val;
+            },
             set: (_, key: string, value: any) => {
-              const properties = (this.constructor as typeof VanReactiveElementImpl).properties;
+              const properties = (this.constructor as VanReactiveElementConstructor).properties;
               if (key in properties) {
                 (this as InternalProperties)[key] = value;
                 return true;
               }
               return false;
             },
-            has: (_, key: string) => key in (this.constructor as typeof VanReactiveElementImpl).properties
-          }) as InferredProperties<T>;
+            has: (_, key: string) => {
+              return key in (this.constructor as VanReactiveElementConstructor).properties;
+            }
+          });
+
+          // Gather props with setter interface - simplified without object freezing
+          const props = new Proxy({ set: setter } as SplitPropertiesWithSetter<any, any>, {
+            get: (target, key: string) => {
+              if (key === 'set') return target.set;
+              return (this as InternalProperties)[key];
+            },
+            set: (_, key: string, value: any) => {
+              if (key === 'set') return false; // set is read-only
+              const properties = (this.constructor as VanReactiveElementConstructor).properties;
+              if (key in properties) {
+                (this as InternalProperties)[key] = value;
+                return true;
+              }
+              return false;
+            },
+            has: (_, key: string) => {
+              if (key === 'set') return true;
+              return key in (this.constructor as VanReactiveElementConstructor).properties;
+            }
+          }) as SplitPropertiesWithSetter<A, S>;
 
           this.registerDisposer(
-            rxScope(() =>
-              // Provide context helpers
-              setup?.(props, {
+            rxScope(() => {
+              // Provide context helpers and store the render function
+              this.render = setup(props, {
                 element: this as VanReactiveElement,
                 noShadowDOM: () => {
                   if (!this.renderRoot) {
@@ -792,27 +875,15 @@ const vanRE = (options: VanREOptions): VanRE => {
                 },
                 onMount: (fn: () => void) => {
                   this.onMount = fn;
-                },
-                render: (fn: () => any) => {
-                  this.render = fn;
-                },
-                setStyles: (styles: string | CSSStyleSheet) => {
-                  // Set styles on the constructor (class)
-                  defineProperty(this.constructor as typeof FunctionalElement, '_dynamicStyles', {
-                    configurable: true,
-                    enumerable: false,
-                    value: styles,
-                    writable: true
-                  });
                 }
-              })
-            )
+              }) as (() => unknown) | undefined;
+            })
           );
         }
       }
 
       FunctionalElement.define(FunctionalElement, customElementName);
-      return FunctionalElement as VanReactiveElementClass;
+      return FunctionalElement as VanReactiveElementConstructor;
     }
   };
 };

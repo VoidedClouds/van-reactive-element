@@ -143,10 +143,10 @@ describe('Slot Integration Tests', () => {
     const Card = define(
       'card',
       {
-        variant: 'default'
-      },
-      (props, { setStyles, element }) => {
-        setStyles(css`
+        attributes: {
+          variant: { type: String, default: 'default' }
+        },
+        styles: css`
           :host {
             display: block;
             border: 1px solid #ddd;
@@ -171,9 +171,10 @@ describe('Slot Integration Tests', () => {
             background: #007bff;
             color: white;
           }
-        `);
-
-        element.render = () =>
+        `
+      },
+      (props) => {
+        return () =>
           tags.div(
             { class: 'card' },
             tags.div({ class: 'card-header' }, tags.slot({ name: 'header' }, 'Card Header')),

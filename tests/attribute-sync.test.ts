@@ -6,12 +6,10 @@ const mockCss = vi.fn((...args: [TemplateStringsArray, ...any[]]) => {
   return args[0].reduce((result, str, i) => result + str + (args[i + 1] || ''), '');
 });
 
-const mockEfSc = vi.fn((fn: () => void | (() => void)) => {
+const mockRxScope = vi.fn((fn: () => void | (() => void)) => {
   const cleanup = fn();
   return cleanup || (() => {});
 });
-
-const mockHtml = vi.fn();
 
 const mockVan = {
   add: vi.fn(),
@@ -34,9 +32,7 @@ describe('Attribute Sync Tests', () => {
 
   beforeEach(() => {
     const result = vanRE({
-      css: mockCss,
-      efSc: mockEfSc,
-      html: mockHtml,
+      rxScope: mockRxScope,
       van: mockVan
     });
     VanReactiveElement = result.VanReactiveElement;
@@ -359,14 +355,17 @@ describe('Attribute Sync Tests', () => {
       const ElementClass = define(
         'attr-component',
         {
-          myProp: {
-            default: 'test',
-            reflect: true
-          },
-          count: {
-            type: Number,
-            default: 0,
-            attribute: 'item-count'
+          attributes: {
+            myProp: {
+              type: String,
+              default: 'test',
+              reflect: true
+            },
+            count: {
+              type: Number,
+              default: 0,
+              attribute: 'item-count'
+            }
           }
         },
         () => {}
@@ -382,24 +381,28 @@ describe('Attribute Sync Tests', () => {
       const ElementClass = define(
         customElementName,
         {
-          reflectedString: {
-            default: 'initial',
-            reflect: true
-          },
-          reflectedNumber: {
-            type: Number,
-            default: 0,
-            reflect: true
-          },
-          reflectedBoolean: {
-            type: Boolean,
-            default: false,
-            reflect: true,
-            attribute: 'is-enabled'
-          },
-          notReflected: {
-            default: 'hidden',
-            reflect: false
+          attributes: {
+            reflectedString: {
+              type: String,
+              default: 'initial',
+              reflect: true
+            },
+            reflectedNumber: {
+              type: Number,
+              default: 0,
+              reflect: true
+            },
+            reflectedBoolean: {
+              type: Boolean,
+              default: false,
+              reflect: true,
+              attribute: 'is-enabled'
+            },
+            notReflected: {
+              type: String,
+              default: 'hidden',
+              reflect: false
+            }
           }
         },
         () => {}
@@ -440,17 +443,20 @@ describe('Attribute Sync Tests', () => {
       define(
         customElementName,
         {
-          stringProp: {
-            default: 'default'
-          },
-          numberProp: {
-            type: Number,
-            default: 0,
-            attribute: 'num-value'
-          },
-          boolProp: {
-            type: Boolean,
-            default: false
+          attributes: {
+            stringProp: {
+              type: String,
+              default: 'default'
+            },
+            numberProp: {
+              type: Number,
+              default: 0,
+              attribute: 'num-value'
+            },
+            boolProp: {
+              type: Boolean,
+              default: false
+            }
           }
         },
         (props) => {
@@ -493,10 +499,13 @@ describe('Attribute Sync Tests', () => {
       const ElementClass = define(
         customElementName,
         {
-          customProp: {
-            default: 'test',
-            converter: uppercaseConverter,
-            reflect: true
+          attributes: {
+            customProp: {
+              type: String,
+              default: 'test',
+              converter: uppercaseConverter,
+              reflect: true
+            }
           }
         },
         () => {}
@@ -515,6 +524,94 @@ describe('Attribute Sync Tests', () => {
       expect(element.getAttribute('custom-prop')).toBe('world');
 
       document.body.removeChild(element);
+    });
+  });
+
+  describe('initial attribute sync with converters', () => {
+    it('should sync initial attribute with custom converter', () => {
+      // Custom converter that uppercases strings
+      const customConverter = {
+        fromAttribute: (value: string | null) => value ? value.toUpperCase() : null,
+        toAttribute: (value: any) => value ? String(value).toLowerCase() : null
+      };
+
+      class TestElement extends VanReactiveElement {
+        static properties = {
+          customProp: {
+            type: String,
+            default: 'default',
+            converter: customConverter
+          }
+        };
+      }
+
+      const customElementName = `test-converter-sync-${Math.random().toString(36).substr(2, 9)}`;
+      customElements.define(customElementName, TestElement);
+
+      // Create element with initial attribute
+      const element = document.createElement(customElementName) as any;
+      element.setAttribute('custom-prop', 'hello');
+      
+      // Manually trigger setup to simulate connection
+      element._setupProperties();
+
+      // Should have synced and converted the initial attribute value
+      expect(element.customProp.val).toBe('HELLO');
+    });
+
+    it('should sync initial attribute with type converter from converters map', () => {
+      class TestElement extends VanReactiveElement {
+        static properties = {
+          count: {
+            type: Number,
+            default: 0
+          },
+          data: {
+            type: Object,
+            default: null
+          }
+        };
+      }
+
+      const customElementName = `test-type-sync-${Math.random().toString(36).substr(2, 9)}`;
+      customElements.define(customElementName, TestElement);
+
+      // Create element with initial attributes
+      const element = document.createElement(customElementName) as any;
+      element.setAttribute('count', '42');
+      element.setAttribute('data', '{"test": true}');
+      
+      // Manually trigger setup to simulate connection
+      element._setupProperties();
+
+      // Should have synced and converted the initial attribute values
+      expect(element.count.val).toBe(42);
+      expect(element.data.val).toEqual({ test: true });
+    });
+
+    it('should handle initial attribute sync without custom converter', () => {
+      class TestElement extends VanReactiveElement {
+        static properties = {
+          message: {
+            type: String,
+            default: 'default',
+            reflect: true
+          }
+        };
+      }
+
+      const customElementName = `test-initial-sync-${Math.random().toString(36).substr(2, 9)}`;
+      customElements.define(customElementName, TestElement);
+
+      // Create element with initial attribute BEFORE setup
+      const element = document.createElement(customElementName) as any;
+      element.setAttribute('message', 'from-attribute');
+      
+      // Now trigger setup - this should sync the attribute
+      element._setupProperties();
+
+      // Should have synced the initial attribute value using default converter
+      expect(element.message.val).toBe('from-attribute');
     });
   });
 

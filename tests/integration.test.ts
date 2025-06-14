@@ -172,11 +172,11 @@ describe('VanReactiveElement Integration Tests', () => {
       define(
         'todo-item',
         {
-          text: { default: '' },
-          completed: { default: false }
-        },
-        (_props, { setStyles, element }) => {
-          setStyles(css`
+          attributes: {
+            text: { type: String, default: '' },
+            completed: { type: Boolean, default: false }
+          },
+          styles: css`
             :host {
               display: block;
               padding: 10px;
@@ -187,31 +187,25 @@ describe('VanReactiveElement Integration Tests', () => {
               text-decoration: line-through;
               opacity: 0.6;
             }
-          `);
-
-          element.render = () => {
-            // Use van.state for reactive properties
-            const completed = _props.completed;
-            const text = _props.text;
-
-            return tags.div(
-              { class: () => (completed.val ? 'completed' : '') },
-              tags.input({
-                type: 'checkbox',
-                checked: completed.val,
-                onchange: (e: Event) => {
-                  completed.val = (e.target as HTMLInputElement).checked;
-                  _props.completed.val = completed.val;
-                }
-              }),
-              tags.span(text)
-            );
-          };
+          `
+        },
+        (_props) => {
+          return () => tags.div(
+            { class: () => (_props.completed.val ? 'completed' : '') },
+            tags.input({
+              type: 'checkbox',
+              checked: _props.completed.val,
+              onchange: (e: Event) => {
+                _props.set.completed = (e.target as HTMLInputElement).checked;
+              }
+            }),
+            tags.span(() => _props.text.val)
+          );
         }
       );
 
       const todo = document.createElement('todo-item') as any;
-      todo.text = 'Test Todo Item';
+      todo.setAttribute('text', 'Test Todo Item');
       container.appendChild(todo);
 
       await promisedTimeout();
@@ -236,18 +230,19 @@ describe('VanReactiveElement Integration Tests', () => {
       define(
         'list-item',
         {
-          value: { default: '' }
+          attributes: {
+            value: { type: String, default: '' }
+          }
         },
         (_props: any, { element }: any) => {
-          element.render = () =>
-            tags.li(
-              {
-                onclick: () => {
-                  element.dispatchCustomEvent('item-click', { detail: element.value.val, bubbles: true });
-                }
-              },
-              element.value
-            );
+          return () => tags.li(
+            {
+              onclick: () => {
+                element.dispatchCustomEvent('item-click', { detail: _props.value.val, bubbles: true });
+              }
+            },
+            () => _props.value.val
+          );
         }
       );
 
@@ -255,10 +250,10 @@ describe('VanReactiveElement Integration Tests', () => {
       define(
         'item-list',
         {
-          items: { default: [] }
-        },
-        (_props: any, { setStyles, element }: any) => {
-          setStyles(css`
+          attributes: {
+            items: { type: Array, default: [] }
+          },
+          styles: css`
             ul {
               list-style: none;
               padding: 0;
@@ -270,28 +265,29 @@ describe('VanReactiveElement Integration Tests', () => {
             li:hover {
               background: #f0f0f0;
             }
-          `);
-
+          `
+        },
+        (_props: any, ctx: any) => {
           const handleItemClick = (e: CustomEvent) => {
-            element.dispatchCustomEvent('selection-change', { detail: e.detail, bubbles: true });
+            ctx.element.dispatchCustomEvent('selection-change', { detail: e.detail, bubbles: true });
           };
 
-          element.onMount = () => {
+          ctx.onMount(() => {
             // Listen on the element itself, not the shadow root
             // Custom events with composed: true will bubble through shadow boundaries
             // Note: Functional components are all named 'FunctionalElement'
-            element.addEventListener('item-click', handleItemClick);
-          };
+            ctx.element.addEventListener('item-click', handleItemClick);
+          });
 
-          element.onCleanup = () => {
-            element.removeEventListener('item-click', handleItemClick);
-          };
+          ctx.onCleanup(() => {
+            ctx.element.removeEventListener('item-click', handleItemClick);
+          });
 
-          element.render = () => () => {
+          return () => {
             // Create elements programmatically to set properties
             const ul = document.createElement('ul');
 
-            element.items.val.forEach((item: string) => {
+            _props.items.val.forEach((item: string) => {
               const listItem = document.createElement('list-item') as any;
               listItem.value = item;
               ul.appendChild(listItem);
@@ -342,12 +338,14 @@ describe('VanReactiveElement Integration Tests', () => {
       define(
         'light-dom',
         {
-          content: { default: 'Light DOM Content' }
+          attributes: {
+            content: { type: String, default: 'Light DOM Content' }
+          }
         },
-        (props: any, { noShadowDOM, element }: any) => {
-          noShadowDOM();
+        (props: any, ctx: any) => {
+          ctx.noShadowDOM();
 
-          element.render = () => tags.div({ class: 'light-content' }, props.content);
+          return () => tags.div({ class: 'light-content' }, props.content);
         }
       );
 
@@ -368,12 +366,16 @@ describe('VanReactiveElement Integration Tests', () => {
       define(
         'props-iteration',
         {
-          name: { type: String, default: 'World' },
-          count: { type: Number, default: 42 },
-          active: { type: Boolean, default: true },
-          data: { attribute: false, default: { test: 'value' } }
+          attributes: {
+            name: { type: String, default: 'World' },
+            count: { type: Number, default: 42 },
+            active: { type: Boolean, default: true }
+          },
+          properties: {
+            data: { test: 'value' }
+          }
         },
-        (props: any, { element }: any) => {
+        (props: any) => {
           // Test destructuring (this only needs the get trap)
           const { name, count, active, data } = props;
           destructuredValues = { name, count, active, data };
@@ -387,7 +389,7 @@ describe('VanReactiveElement Integration Tests', () => {
             hasNonExistent: 'nonExistent' in props
           };
 
-          element.render = () =>
+          return () =>
             tags.div(
               tags.p(`Has name: ${hasChecks.hasName}`),
               tags.p(`Has count: ${hasChecks.hasCount}`),
@@ -486,22 +488,26 @@ describe('VanReactiveElement Integration Tests', () => {
       define(
         tag,
         {
-          message: { default: 'initial', type: String },
-          count: { type: Number, default: 0 },
-          data: { attribute: false, default: { x: 1 } },
-          isActive: { type: Boolean, default: false, reflect: true }
+          attributes: {
+            message: { type: String, default: 'initial' },
+            count: { type: Number, default: 0 },
+            isActive: { type: Boolean, default: false, reflect: true }
+          },
+          properties: {
+            data: { x: 1 }
+          }
         },
-        (props, { render }) => {
+        (props) => {
           capturedProps = props;
 
-          render(() => {
+          return () => {
             return tags.div(
               tags.p({ class: 'message' }, props.message),
               tags.p({ class: 'count' }, 'Count: ', props.count),
               tags.p({ class: 'data' }, 'Data: ', () => JSON.stringify(props.data.val)),
               tags.p({ class: 'active' }, 'Active: ', props.isActive)
             );
-          });
+          };
         }
       );
 
@@ -516,11 +522,11 @@ describe('VanReactiveElement Integration Tests', () => {
       expect(element.renderRoot.querySelector('.data')?.textContent).toBe('Data: {"x":1}');
       expect(element.renderRoot.querySelector('.active')?.textContent).toBe('Active: false');
 
-      // Test setting properties through props proxy
-      capturedProps.message = 'updated via props';
-      capturedProps.count = 42;
-      capturedProps.data = { x: 2, y: 3 };
-      capturedProps.isActive = true;
+      // Test setting properties through props.set
+      capturedProps.set.message = 'updated via props';
+      capturedProps.set.count = 42;
+      capturedProps.set.data = { x: 2, y: 3 };
+      capturedProps.set.isActive = true;
 
       await promisedTimeout();
 
@@ -551,7 +557,7 @@ describe('VanReactiveElement Integration Tests', () => {
 
       // Test that setter only works for defined properties
       expect(() => {
-        (capturedProps as any).undefinedProp = 'should not work';
+        (capturedProps.set as any).undefinedProp = 'should not work';
       }).toThrow("'set' on proxy: trap returned falsish for property 'undefinedProp'");
 
       // Verify the property was not set on the element
@@ -632,19 +638,19 @@ describe('VanReactiveElement Integration Tests', () => {
       define(
         'toggle-button',
         {
-          pressed: {
-            type: Boolean,
-            default: false,
-            reflect: true,
-            attribute: 'aria-pressed'
+          attributes: {
+            pressed: {
+              type: Boolean,
+              default: false,
+              reflect: true,
+              attribute: 'aria-pressed'
+            },
+            label: {
+              type: String,
+              default: 'Toggle'
+            }
           },
-          label: {
-            type: String,
-            default: 'Toggle'
-          }
-        },
-        (props, { setStyles, element }) => {
-          setStyles(css`
+          styles: css`
             :host {
               display: inline-block;
             }
@@ -656,13 +662,14 @@ describe('VanReactiveElement Integration Tests', () => {
               background: #007bff;
               color: white;
             }
-          `);
-
-          element.render = () =>
+          `
+        },
+        (props, ctx) => {
+          return () =>
             tags.button(
               {
                 'aria-pressed': props.pressed,
-                onclick: () => ((element as any).pressed = !(element as any).pressed.val)
+                onclick: () => (ctx.element.pressed = !ctx.element.pressed.val)
               },
               props.label
             );
@@ -753,20 +760,23 @@ describe('VanReactiveElement Integration Tests', () => {
       define(
         tag,
         {
-          hello: { type: String, default: 'Hello' },
-          world: { attribute: false, default: { foo: 'bar' } },
-          zoom: { attribute: false, default: 'replace with state' }
-        },
-        (props, { element, setStyles }) => {
-          setStyles(css`
+          attributes: {
+            hello: { type: String, default: 'Hello' }
+          },
+          properties: {
+            world: { foo: 'bar' },
+            zoom: 'replace with state'
+          },
+          styles: css`
             :host {
               display: block;
               padding: 10px;
               border: 1px solid #ccc;
             }
-          `);
-
-          element.render = () => {
+          `
+        },
+        (props) => {
+          return () => {
             return tags.div(tags.h2(props.hello), tags.p('Data: ', JSON.stringify(props.world.val)), tags.span(props.zoom.val));
           };
         }
