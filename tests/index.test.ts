@@ -385,6 +385,71 @@ describe('vanRE', () => {
     });
   });
 
+  describe('setProperties', () => {
+    it('should properly set properties', () => {
+      let propValues = { prop1: 'prop1 value start', prop2: 'prop2 value start' };
+
+      class TestElement extends VanReactiveElement {
+        static properties = {
+          prop1: { default: propValues.prop1, reflect: true },
+          prop2: { attribute: false, default: propValues.prop2 }
+        };
+      }
+
+      const customElementName = `test-element-${Math.random().toString(36).substr(2, 9)}`;
+      customElements.define(customElementName, TestElement);
+
+      const element = new TestElement();
+
+      expect(element.prop1.val).toBe(propValues.prop1);
+      expect(element.prop2.val).toBe(propValues.prop2);
+
+      propValues = { prop1: 'prop1 value updated', prop2: 'prop2 value updated' };
+
+      element.setProperties(propValues);
+
+      expect(element.prop1.val).toBe(propValues.prop1);
+      expect(element.prop2.val).toBe(propValues.prop2);
+
+      expect(element.getAttribute('prop1')).toBe(propValues.prop1);
+      // prop2 is not a reflected attribute, should be null
+      expect(element.getAttribute('prop2')).toBe(null);
+    });
+  });
+
+  describe('setProperty', () => {
+    it('should properly set properties', () => {
+      let propValues = { prop1: 'prop1 value start', prop2: 'prop2 value start' };
+
+      class TestElement extends VanReactiveElement {
+        static properties = {
+          prop1: { default: propValues.prop1, reflect: true },
+          prop2: { attribute: false, default: propValues.prop2 }
+        };
+      }
+
+      const customElementName = `test-element-${Math.random().toString(36).substr(2, 9)}`;
+      customElements.define(customElementName, TestElement);
+
+      const element = new TestElement();
+
+      expect(element.prop1.val).toBe(propValues.prop1);
+      expect(element.prop2.val).toBe(propValues.prop2);
+
+      propValues = { prop1: 'prop1 value updated', prop2: 'prop2 value updated' };
+
+      element.setProperty('prop1', propValues.prop1);
+      element.setProperty('prop2', propValues.prop2);
+
+      expect(element.prop1.val).toBe(propValues.prop1);
+      expect(element.prop2.val).toBe(propValues.prop2);
+
+      expect(element.getAttribute('prop1')).toBe(propValues.prop1);
+      // prop2 is not a reflected attribute, should be null
+      expect(element.getAttribute('prop2')).toBe(null);
+    });
+  });
+
   describe('define function', () => {
     it('should create functional components', () => {
       const setupFn = vi.fn();

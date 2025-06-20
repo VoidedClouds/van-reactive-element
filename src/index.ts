@@ -599,6 +599,26 @@ const vanRE = (options: VanREOptions): VanRE => {
     hasShadowDOM(): boolean {
       return this.renderRoot !== this && this.renderRoot instanceof ShadowRoot;
     }
+    /**
+     * Sets the properties of the current instance.
+     * @param {Record<string, unknown>} properties - An object containing the properties to set.
+     * @returns {VanReactiveElementClass} - The current instance for chaining.
+     */
+    setProperties(properties: Record<string, unknown>): VanReactiveElementClass {
+      return Object.assign(this, properties);
+    }
+
+    /**
+     * Sets a single property on the current instance.
+     * This is a universal setter that assigns the given value to the specified property.
+     *
+     * @param {string} property - The name of the property to set.
+     * @param {unknown} value - The value to assign to the property.
+     * @returns {unknown} The value assigned.
+     */
+    setProperty(property: string, value: unknown): unknown {
+      return (this[property] = value);
+    }
 
     // --- Selector Methods ---
 
@@ -700,8 +720,12 @@ const vanRE = (options: VanREOptions): VanRE => {
           let propValue = isValueState(defaultValue) ? defaultValue : van.state(defaultValue);
 
           defineProperty(getPrototypeOf(this), property, {
-            get: () => propValue, // Direct reference via closure
-            set: (newValue) => (isValueState(newValue) ? (propValue = newValue) : (propValue.val = newValue)),
+            get() {
+              return propValue;
+            }, // Direct reference via closure
+            set(newValue) {
+              isValueState(newValue) ? (propValue = newValue) : (propValue.val = newValue);
+            },
             configurable: true,
             enumerable: true
           });
@@ -715,8 +739,10 @@ const vanRE = (options: VanREOptions): VanRE => {
           const propertyState = van.state(defaultValue);
 
           defineProperty(this, property, {
-            get: () => propertyState, // Return the state object itself via closure
-            set: (newValue) => {
+            get() {
+              return propertyState;
+            }, // Return the state object itself via closure
+            set(newValue) {
               if (propertyState.rawVal === newValue) return;
               propertyState.val = newValue;
 
@@ -844,7 +870,7 @@ const vanRE = (options: VanREOptions): VanRE => {
             }
           });
 
-          // Gather props with setter interface - simplified without object freezing
+          // Gather props with setter interface
           const props = new Proxy({ set: setter } as SplitPropertiesWithSetter<any, any>, {
             get: (target, key: string) => {
               if (key === 'set') return target.set;
