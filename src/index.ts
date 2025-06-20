@@ -69,24 +69,24 @@ export interface VanREOptions {
  *     :host { display: block; }
  *     button { padding: 8px; }
  *   `
- * }, (props) => {
+ * }, (element) => {
  *   // Attribute properties are StateView (read-only)
- *   const name = props.name.val;          // ✓ Can read
- *   // props.name.val = 'Jane';           // ✗ Error: readonly
+ *   const name = element.name.val;          // ✓ Can read
+ *   // element.name.val = 'Jane';           // ✗ Error: readonly
  *
  *   // Internal properties are State (read-write)
- *   props.data.val = { foo: 'new' };      // ✓ Can modify
- *   props.cache.val.push('item');         // ✓ Direct mutation
- *   props.loading.val = true;             // ✓ Direct assignment
+ *   element.data.val = { foo: 'new' };      // ✓ Can modify
+ *   element.cache.val.push('item');         // ✓ Direct mutation
+ *   element.loading.val = true;             // ✓ Direct assignment
  *
- *   // Universal setter for all properties
- *   props.set.name = 'Jane';              // ✓ Attributes
- *   props.set.data = { foo: 'bar' };      // ✓ Properties
+ *   // Setting properties using setProperty method
+ *   element.setProperty('name', 'Jane');              // ✓ Attributes
+ *   element.setProperty('data', { foo: 'bar' });      // ✓ Properties
  *
  *   // Return the render function
  *   return () => button(
- *     { onclick: () => props.set.count = props.count.val + 1 },
- *     props.label, ': ', props.count
+ *     { onclick: () => element.setProperty('count', element.count.val + 1) },
+ *     element.label, ': ', element.count
  *   );
  * });
  *
@@ -96,8 +96,8 @@ export interface VanREOptions {
  *   properties: { internal: 'state' },
  *   shadowRootOptions: { mode: 'closed', delegatesFocus: true },
  *   styles: `:host { display: inline-block; }`
- * }, (props) => {
- *   return () => span(props.name);
+ * }, (element) => {
+ *   return () => span(element.name);
  * });
  * ```
  *
@@ -172,19 +172,17 @@ export interface PropertyOptions<T = unknown> {
  *     :host { display: block; }
  *     button { padding: 8px; }
  *   `
- * }, (props, ctx) => {
+ * }, (element, ctx) => {
  *   ctx.onMount(() => console.log('Component mounted'));
  *   ctx.onCleanup(() => console.log('Component cleanup'));
  *
  *   // Return the render function
  *   return () => button({
- *     onclick: () => props.set.count = props.count.val + 1
- *   }, props.label, ': ', props.count);
+ *     onclick: () => element.setProperty('count', element.count.val + 1)
+ *   }, element.label, ': ', element.count);
  * })
  */
-export interface SetupContext<E extends VanReactiveElement = VanReactiveElement> {
-  /** The custom element instance */
-  element: E;
+export interface SetupContext {
   /** Disable shadow DOM (use light DOM instead) */
   noShadowDOM: () => void;
   /** Register cleanup function called on disconnect */
@@ -232,7 +230,7 @@ export interface DefineOptions<A extends PropertyDefinitions = PropertyDefinitio
 export type DefineFunction = <A extends PropertyDefinitions, S extends StateDefinitions>(
   customElementName: string,
   options: DefineOptions<A, S>,
-  setup: (props: SplitPropertiesWithSetter<A, S>, context: SetupContext) => (() => unknown) | void
+  setup: (element: TypedElementInstance<A, S>, context: SetupContext) => (() => unknown) | void
 ) => VanReactiveElementConstructor;
 
 export interface VanRE {
@@ -252,6 +250,8 @@ export interface VanReactiveElement extends HTMLElement {
   query(selector: string): Element | null;
   queryAll(selector: string): NodeListOf<Element>;
   registerDisposer(disposer: () => void): () => void;
+  setProperties(properties: Record<string, unknown>): VanReactiveElement;
+  setProperty(property: string, value: unknown): unknown;
 }
 
 /**
@@ -311,25 +311,13 @@ export type InferredStateProperties<T> = {
 };
 
 /**
- * Extract the inner type from StateView or State
+ * Combined type for element instance with reactive properties.
+ * This represents the element passed to the setup function, with all
+ * attributes and properties typed appropriately.
  */
-type UnwrapReactiveType<T> = T extends StateView<infer U> ? U : T extends State<infer U> ? U : T;
-
-/**
- * Type for the split property setter that accepts plain values
- * Automatically unwraps StateView and State types
- */
-export type SplitPropertySetter<A, S> = {
-  [K in keyof (A & S)]: UnwrapReactiveType<K extends keyof S ? State<S[K]> : K extends keyof A ? InferredAttributeProperties<A>[K] : never>;
-};
-
-/**
- * Combined properties for split definition with setter
- */
-export type SplitPropertiesWithSetter<A, S> = InferredAttributeProperties<A> &
-  InferredStateProperties<S> & {
-    set: SplitPropertySetter<A, S>;
-  };
+export type TypedElementInstance<A extends PropertyDefinitions, S extends StateDefinitions> = VanReactiveElement &
+  InferredAttributeProperties<A> &
+  InferredStateProperties<S>;
 
 const vanRE = (options: VanREOptions): VanRE => {
   const { rxScope = (fn) => (fn?.(), () => {}), van } = options;
@@ -599,6 +587,7 @@ const vanRE = (options: VanREOptions): VanRE => {
     hasShadowDOM(): boolean {
       return this.renderRoot !== this && this.renderRoot instanceof ShadowRoot;
     }
+
     /**
      * Sets the properties of the current instance.
      * @param {Record<string, unknown>} properties - An object containing the properties to set.
@@ -716,7 +705,7 @@ const vanRE = (options: VanREOptions): VanRE => {
         const defaultValue = userOptions.default;
 
         if (userOptions.attribute === false) {
-          // Simple storage for properties without attributes (non-reactive)
+          // Always store States for properties that are not attributes
           let propValue = isValueState(defaultValue) ? defaultValue : van.state(defaultValue);
 
           defineProperty(getPrototypeOf(this), property, {
@@ -824,7 +813,7 @@ const vanRE = (options: VanREOptions): VanRE => {
     define: <A extends PropertyDefinitions, S extends StateDefinitions>(
       customElementName: string,
       options: DefineOptions<A, S>,
-      setup: (props: SplitPropertiesWithSetter<A, S>, context: SetupContext) => (() => unknown) | void
+      setup: (element: TypedElementInstance<A, S>, context: SetupContext) => (() => unknown) | void
     ) => {
       const { attributes = {} as A, properties = {} as S, shadowRootOptions, styles } = options;
       // Merge properties, marking internal properties with attribute: false
@@ -847,55 +836,10 @@ const vanRE = (options: VanREOptions): VanRE => {
         constructor() {
           super();
 
-          // Create setter proxy object
-          const setter = new Proxy({} as SplitPropertySetter<any, any>, {
-            get: (_, key: string) => {
-              // Return undefined for non-existent properties
-              const properties = (this.constructor as VanReactiveElementConstructor).properties;
-              if (!(key in properties)) return undefined;
-
-              // Return current value for getter
-              return (this as InternalProperties)[key]?.val;
-            },
-            set: (_, key: string, value: any) => {
-              const properties = (this.constructor as VanReactiveElementConstructor).properties;
-              if (key in properties) {
-                (this as InternalProperties)[key] = value;
-                return true;
-              }
-              return false;
-            },
-            has: (_, key: string) => {
-              return key in (this.constructor as VanReactiveElementConstructor).properties;
-            }
-          });
-
-          // Gather props with setter interface
-          const props = new Proxy({ set: setter } as SplitPropertiesWithSetter<any, any>, {
-            get: (target, key: string) => {
-              if (key === 'set') return target.set;
-              return (this as InternalProperties)[key];
-            },
-            set: (_, key: string, value: any) => {
-              if (key === 'set') return false; // set is read-only
-              const properties = (this.constructor as VanReactiveElementConstructor).properties;
-              if (key in properties) {
-                (this as InternalProperties)[key] = value;
-                return true;
-              }
-              return false;
-            },
-            has: (_, key: string) => {
-              if (key === 'set') return true;
-              return key in (this.constructor as VanReactiveElementConstructor).properties;
-            }
-          }) as SplitPropertiesWithSetter<A, S>;
-
           this.registerDisposer(
             rxScope(() => {
-              // Provide context helpers and store the render function
-              this.render = setup(props, {
-                element: this as VanReactiveElement,
+              // Pass the typed element instance directly to the setup function
+              this.render = setup(this as TypedElementInstance<A, S>, {
                 noShadowDOM: () => {
                   if (!this.renderRoot) {
                     return (this.createRenderRoot = () => this);

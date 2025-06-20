@@ -502,10 +502,14 @@ describe('vanRE', () => {
       expect(mockRxScope).toHaveBeenCalled();
       expect(setupFn).toHaveBeenCalled();
 
-      const [props, context] = setupFn.mock.calls[0];
-      expect(props).toHaveProperty('value');
-      expect(props).toHaveProperty('set');
-      expect(context).toHaveProperty('element');
+      const callArgs = setupFn.mock.calls[0];
+      expect(callArgs).toBeDefined();
+      expect(callArgs.length).toBeGreaterThanOrEqual(2);
+
+      const [elementArg, context] = callArgs as unknown as [any, any];
+      expect(elementArg).toHaveProperty('value');
+      expect(elementArg).toHaveProperty('setProperty');
+      expect(elementArg).toHaveProperty('setProperties');
       expect(context).toHaveProperty('noShadowDOM');
       expect(context).toHaveProperty('onCleanup');
       expect(context).toHaveProperty('onMount');
@@ -559,7 +563,7 @@ describe('vanRE', () => {
 
     it('should handle noShadowDOM option', () => {
       let noShadowDOMFn: any;
-      const setupFn = vi.fn((props, context) => {
+      const setupFn = vi.fn((element, context) => {
         noShadowDOMFn = context.noShadowDOM;
       });
 
@@ -666,220 +670,13 @@ describe('vanRE', () => {
     });
   });
 
-  describe('Functional Component Property Proxy', () => {
-    it('should handle setter proxy getter for non-existent properties', () => {
-      let capturedProps: any = null;
-
-      const defineSpy = vi.spyOn(customElements, 'define').mockImplementation(() => {});
-
-      define(
-        'test-setter-getter',
-        {
-          attributes: {
-            name: { type: String, default: 'test' }
-          }
-        },
-        (props) => {
-          capturedProps = props;
-          return () => 'test';
-        }
-      );
-
-      defineSpy.mockRestore();
-
-      const customElementName = `test-setter-${Math.random().toString(36).substr(2, 9)}`;
-      const ElementClass = define(
-        customElementName,
-        {
-          attributes: {
-            name: { type: String, default: 'test' }
-          }
-        },
-        (props) => {
-          capturedProps = props;
-          return () => 'test';
-        }
-      );
-
-      const element = new ElementClass();
-
-      // Access non-existent property through setter
-      expect(capturedProps.set.nonExistent).toBeUndefined();
-
-      // Access existing property through setter
-      expect(capturedProps.set.name).toBe('test');
-    });
-
-    it('should handle setter proxy has trap', () => {
-      let capturedProps: any = null;
-
-      const defineSpy = vi.spyOn(customElements, 'define').mockImplementation(() => {});
-
-      const ElementClass = define(
-        'test-setter-has',
-        {
-          attributes: {
-            count: { type: Number, default: 0 }
-          }
-        },
-        (props) => {
-          capturedProps = props;
-          return () => 'test';
-        }
-      );
-
-      defineSpy.mockRestore();
-
-      const customElementName = `test-has-${Math.random().toString(36).substr(2, 9)}`;
-      customElements.define(customElementName, ElementClass);
-      const element = new ElementClass();
-
-      // Test 'in' operator on setter
-      expect('count' in capturedProps.set).toBe(true);
-      expect('nonExistent' in capturedProps.set).toBe(false);
-    });
-
-    it('should prevent setting the "set" property on props proxy', () => {
-      let capturedProps: any = null;
-
-      const defineSpy = vi.spyOn(customElements, 'define').mockImplementation(() => {});
-
-      const ElementClass = define(
-        'test-props-set-readonly',
-        {
-          attributes: {
-            value: { type: String, default: 'test' }
-          }
-        },
-        (props) => {
-          capturedProps = props;
-          return () => 'test';
-        }
-      );
-
-      defineSpy.mockRestore();
-
-      const customElementName = `test-readonly-${Math.random().toString(36).substr(2, 9)}`;
-      customElements.define(customElementName, ElementClass);
-      const element = new ElementClass();
-
-      // Try to set the 'set' property - should be prevented by proxy
-      const originalSet = capturedProps.set;
-
-      // This should fail silently in non-strict mode or throw in strict mode
-      try {
-        capturedProps.set = 'should not work';
-      } catch (e) {
-        // Expected in strict mode
-      }
-
-      expect(capturedProps.set).toBe(originalSet); // Should remain unchanged
-    });
-
-    it('should handle property setting for non-existent properties', () => {
-      let capturedProps: any = null;
-
-      const defineSpy = vi.spyOn(customElements, 'define').mockImplementation(() => {});
-
-      const ElementClass = define(
-        'test-props-nonexistent',
-        {
-          attributes: {
-            name: { type: String, default: 'test' }
-          }
-        },
-        (props) => {
-          capturedProps = props;
-          return () => 'test';
-        }
-      );
-
-      defineSpy.mockRestore();
-
-      const customElementName = `test-nonexistent-${Math.random().toString(36).substr(2, 9)}`;
-      customElements.define(customElementName, ElementClass);
-      const element = new ElementClass();
-
-      // Try to set non-existent property - should return false
-      expect(() => {
-        capturedProps.nonExistent = 'value';
-      }).toThrow(); // Proxy trap returns false, which throws in strict mode
-    });
-
-    it('should handle direct property assignment through props proxy', () => {
-      let capturedProps: any = null;
-
-      const defineSpy = vi.spyOn(customElements, 'define').mockImplementation(() => {});
-
-      const ElementClass = define(
-        'test-props-direct-set',
-        {
-          attributes: {
-            name: { type: String, default: 'initial' }
-          },
-          properties: {
-            count: 0
-          }
-        },
-        (props) => {
-          capturedProps = props;
-          return () => 'test';
-        }
-      );
-
-      defineSpy.mockRestore();
-
-      const customElementName = `test-direct-${Math.random().toString(36).substr(2, 9)}`;
-      customElements.define(customElementName, ElementClass);
-      const element = new ElementClass();
-
-      // Direct assignment to properties through props proxy
-      capturedProps.name = 'updated'; // This should work for attributes
-      capturedProps.count = 42; // This should work for properties
-
-      // Verify the values were updated
-      expect(element.name.val).toBe('updated');
-      expect(element.count.val).toBe(42);
-    });
-
-    it('should handle has trap for "set" property', () => {
-      let capturedProps: any = null;
-
-      const defineSpy = vi.spyOn(customElements, 'define').mockImplementation(() => {});
-
-      const ElementClass = define(
-        'test-props-has-set',
-        {
-          attributes: {
-            value: { type: String, default: 'test' }
-          }
-        },
-        (props) => {
-          capturedProps = props;
-          return () => 'test';
-        }
-      );
-
-      defineSpy.mockRestore();
-
-      const customElementName = `test-has-set-${Math.random().toString(36).substr(2, 9)}`;
-      customElements.define(customElementName, ElementClass);
-      const element = new ElementClass();
-
-      // Test 'in' operator for 'set' property
-      expect('set' in capturedProps).toBe(true);
-      expect('value' in capturedProps).toBe(true);
-      expect('nonExistent' in capturedProps).toBe(false);
-    });
-  });
-
   describe('Edge Cases', () => {
     it('should warn when noShadowDOM is called after renderRoot is created', async () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const defineSpy = vi.spyOn(customElements, 'define').mockImplementation(() => {});
 
       let noShadowDOMFn: any;
-      const setupFn = vi.fn((props, context) => {
+      const setupFn = vi.fn((element, context) => {
         noShadowDOMFn = context.noShadowDOM;
       });
 

@@ -92,14 +92,14 @@ const CounterElement = define(
       }
     `
   },
-  (props, { element, noShadowDOM, onCleanup, onMount }) => {
+  (element, { noShadowDOM, onCleanup, onMount }) => {
     return () => {
       const { button, p } = van.tags;
 
       return [
-        p('Count: ', props.count),
-        button({ onclick: () => props.count.val-- }, 'Decrement'),
-        button({ onclick: () => props.count.val++ }, 'Increment')
+        p('Count: ', element.count),
+        button({ onclick: () => element.count.val-- }, 'Decrement'),
+        button({ onclick: () => element.count.val++ }, 'Increment')
       ];
     };
   }
@@ -220,12 +220,12 @@ van.add(document.body, todoList);
 const TodoList = define(
   'todo-list',
   {
-    // Attributes (reactive, read-only via props, settable via props.set)
+    // Attributes (reactive, read-only, settable via setProperty/setProperties)
     attributes: {
       title: { type: String, default: 'Todo List' },
       titleAttributePostfix: { type: String, default: 'Will be replaced' }
     },
-    // Properties (reactive, read-write directly)
+    // Properties (reactive, read-write directly, settable via setProperty/setProperties)
     properties: {
       titlePropertyPostfix: 'Will also be replaced'
     },
@@ -236,7 +236,7 @@ const TodoList = define(
       }
     `
   },
-  (props, { element, noShadowDOM, onCleanup, onMount }) => {
+  (element, { noShadowDOM, onCleanup, onMount }) => {
     // Factory for creating a todo item component
     const createTodoItem = (text) => {
       const done = van.state(false); // Track if todo is done
@@ -268,7 +268,7 @@ const TodoList = define(
 
       // Main DOM structure
       const dom = div(
-        h2(props.title, ' - Attribute: ', props.titleAttributePostfix, ' - Property: ', props.titlePropertyPostfix),
+        h2(element.title, ' - Attribute: ', element.titleAttributePostfix, ' - Property: ', element.titlePropertyPostfix),
         div('Add Click Count: ', count, ' * 2 = ', derived),
         inputDom,
         button(
@@ -355,6 +355,8 @@ Base class for creating web components with VanJS integration.
 - `render()` - Define the component's content. Returns either:
   - Content directly with state objects for automatic reactivity: `div(this.myState)`
   - A function returning content for computed values or when using `.val`: `() => display.val ? div(this.myState) : ''`
+- `setProperty(name, value)` - Set a single property value (works for both attributes and properties)
+- `setProperties(properties)` - Set multiple properties at once using an object (works for both attributes and properties)
 
 #### Static Methods
 
@@ -381,16 +383,15 @@ A custom element class, which can be subclassed or registered manually if needed
 
 **Setup Function Parameters:**
 
-- `props` - Reactive property accessors with split API:
-  - **Attributes** (read-only): `props.attributeName` is a StateView
-    - Reading: `props.attributeName.val` or direct binding `props.attributeName` in templates
-    - Setting: Use the universal setter `props.set.attributeName = 'new value'`
-  - **Properties** (read-write): `props.propertyName` is a State
-    - Reading: `props.propertyName.val` or direct binding `props.propertyName` in templates
-    - Setting: `props.propertyName.val = { new: 'value' }` to update the State value or use the universal setter `props.propertyName = 'new value'` to update the State value or replace the State
-  - **Universal setter**: `props.set.attributeOrPropertyName = value` works for both types
+- `element` - The custom element instance with typed reactive properties:
+  - **Attributes** (read-only): `element.attributeName` is a StateView
+    - Reading: `element.attributeName.val` or direct binding `element.attributeName` in templates
+    - Setting: Use `element.setProperty('attributeName', 'new value')` and `element.setProperties(properties)`
+  - **Properties** (read-write): `element.propertyName` is a State
+    - Reading: `element.propertyName.val` or direct binding `element.propertyName` in templates
+    - Setting: `element.propertyName.val = { new: 'value' }` to update the State value or `element.setProperty('attributeName', 'new value')` and `element.setProperties(properties)` to update the State reference or value
+  - **Universal setters**: `element.setProperty('name', value)` and `element.setProperties(properties)` work for both attributes and properties
 - `context` - Component context object:
-  - `element` - The element instance
   - `noShadowDOM()` - Disable shadow DOM
   - `onCleanup(fn)` - Set cleanup callback
   - `onMount(fn)` - Set mount callback
@@ -403,11 +404,11 @@ The setup function must return a render function that defines the component's co
 1. **Reactivity**: Properties are not reactive by default. Use `van.state()` or `van.derive()` for reactive properties.
 2. **Element Naming**: You must provide the full custom element name (with hyphen) when calling `define`.
 3. **Property Binding**: Properties with attribute binding use `van.state` internally for reactivity.
-4. **Split API in Functional Components**:
-   - Attributes are read-only (`StateView`) - use `props.set.attrName = value` to update
-   - Internal properties are read-write (`State`) - can be updated directly with `props.propName = value`
+4. **Element-based API in Functional Components**:
+   - Attributes are read-only (`StateView`) - use `element.setProperty('attrName', value)` and `element.setProperties(properties)` to update
+   - Internal properties are read-write (`State`) - can be updated directly with `element.propName.val = value`
 
-#### Example: Split API Usage
+#### Example: Element API Usage
 
 ```javascript
 define(
@@ -424,32 +425,22 @@ define(
       items: []
     }
   },
-  (props) => {
+  (element) => {
     // Reading attributes (StateView)
-    console.log(props.name.val); // "World"
+    console.log(element.name.val); // "World"
 
-    // Setting attributes via universal setter
-    props.set.name = 'Hello';
-    props.set.count = 42;
+    // Setting attributes via setProperties method
+    element.setProperties({ count: 42, name: 'Hello' });
 
     // Reading/writing properties
-    // props.data = { foo: 'updated' };  // ❌ Requires type casting in TypeScript
-    props.data.val = { foo: 'updated' }; // ✅ Updates value properly
-    props.items.val.push('new item'); // ✅ Modifying array contents
+    element.data.val = { foo: 'updated' }; // ✅ Updates value properly
+    element.items.val.push('new item'); // ✅ Modifying array contents
 
-    // Using universal setter (recommended)
-    props.set.data = { foo: 'via setter' }; // ✅ Type-safe value update
+    // Using setProperty method (works for both attributes and properties)
+    element.setProperty('data', { foo: 'via setter' }); // ✅ Type-safe value update
 
     // Return render function
-    return () =>
-      div(
-        'Name: ',
-        () => props.name.val,
-        ' Count: ',
-        () => props.count.val,
-        ' Data: ',
-        () => JSON.stringify(props.data.val)
-      );
+    return () => div('Name: ', element.name, ' Count: ', element.count, ' Data: ', () => JSON.stringify(element.data.val));
   }
 );
 ```
@@ -474,8 +465,8 @@ VanJS Reactive Element supports two patterns for reactive rendering:
      const {div} = van.tags;
      // Return a function when using computed values or .val
      return () => div(
-       div('Count: ', this.count.val),
-       div('Doubled: ', this.count.val * 2)
+       div('Count: ', this.count),
+       div('Doubled: ', () => this.count.val * 2)
      );
    }
    ```
@@ -508,11 +499,8 @@ class MyComponent extends VanReactiveElement {
     // ❌ Won't be reactive - getter is called once
     // return div('Doubled: ', this.doubled);
 
-    // ✅ Option 1: Use function wrapper for computed values
-    return () => div('Doubled: ', this.doubled);
-
-    // ✅ Option 2: Pass state directly (preferred for simple cases)
-    // return div('Count: ', this.count);
+    // ✅  Use van.derive state or function wrapper for computed values
+    return div('Doubled: ', () => this.doubled);
   }
 }
 ```
@@ -661,16 +649,16 @@ const ToggleButton = define(
       }
     }
   },
-  (props, { element }) => {
+  (element, {}) => {
     return () => {
       const { button } = van.tags;
 
       return button(
         {
-          'aria-pressed': props.pressed,
-          onclick: () => (props.set.pressed = !props.pressed.val)
+          'aria-pressed': element.pressed,
+          onclick: () => element.setProperty('pressed', !element.pressed.val)
         },
-        props.label
+        element.label
       );
     };
   }

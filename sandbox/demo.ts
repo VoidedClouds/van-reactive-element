@@ -9,7 +9,7 @@ const { VanReactiveElement, define } = vanRE({ van });
 
 // Basic HTML Rendering Demo
 export function setupBasicHTML(container: HTMLElement) {
-  define('basic-html', {}, (props, { element, noShadowDOM, onCleanup, onMount }) => {
+  define('basic-html', {}, (element, { noShadowDOM, onCleanup, onMount }) => {
     noShadowDOM();
 
     return () =>
@@ -75,21 +75,21 @@ export function setupReactiveStateFunction(container: HTMLElement) {
   define(
     'reactive-state-function',
     { attributes: { name: { default: '', reflect: true } }, properties: { count: 0 } },
-    (props, { element, noShadowDOM }) => {
+    (element, { noShadowDOM }) => {
       noShadowDOM();
 
       return () =>
         html`
           <div>
-            <h3>Hello, ${props.name} - Function!</h3>
-            <p>Count: ${props.count}</p>
-            <button onclick=${() => props.count.val--}>Decrement</button>
-            <button onclick=${() => props.count.val++}>Increment</button>
+            <h3>Hello, ${element.name} - Function!</h3>
+            <p>Count: ${element.count}</p>
+            <button onclick=${() => element.count.val--}>Decrement</button>
+            <button onclick=${() => element.count.val++}>Increment</button>
             <br />
             <input
               type="text"
-              value=${props.name}
-              oninput=${(e: Event) => (props.set.name = (e.target as HTMLInputElement).value)}
+              value=${element.name}
+              oninput=${(e: Event) => element.setProperties({ name: (e.target as HTMLInputElement).value })}
               placeholder="Enter your name"
             />
           </div>
